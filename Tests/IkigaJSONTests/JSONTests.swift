@@ -1,14 +1,35 @@
 import XCTest
 import Foundation
-@testable import Officer
+@testable import IkigaJSON
 
-var newParser: OfficerJSONDecoder {
-    return OfficerJSONDecoder()
+var newParser: IkigaJSONDeocder {
+    return IkigaJSONDeocder()
 //var newParser: Foundation.JSONDecoder {
 //    return Foundation.JSONDecoder()
 }
 
-final class JSONTests: XCTestCase {
+final class IkigaJSONTests: XCTestCase {
+    func testEmojis() throws {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "flag": "🇳🇱"
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Decodable {
+            let yes: String
+            let bug: String
+            let flag: String
+        }
+        
+        let test = try newParser.decode(Test.self, from: json)
+        XCTAssertEqual(test.yes, "✅")
+        XCTAssertEqual(test.bug, "🐛")
+        XCTAssertEqual(test.flag, "🇳🇱")
+    }
+    
     func testObject() throws {
         let json = """
         {

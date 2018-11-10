@@ -12,7 +12,7 @@ public struct JSONDecoderSettings {
     public var decodeMissingKeyAsNil = true
 }
 
-public struct OfficerJSONDecoder {
+public struct IkigaJSONDeocder {
     public var settings: JSONDecoderSettings
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
