@@ -1,18 +1,14 @@
 import Foundation
 
 public struct JSONDecoderSettings {
-    public enum NilDecodingStrategy {
-        case noKey
-        case emptyValue
-    }
-    
     public init() {}
     
     public var userInfo = [CodingUserInfoKey : Any]()
+    public var decodeUnicode = true
     public var decodeMissingKeyAsNil = true
 }
 
-public struct IkigaJSONDeocder {
+public struct IkigaJSONDecoder {
     public var settings: JSONDecoderSettings
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
@@ -79,7 +75,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     
     var allKeys: [Key] {
         return object.pairs.compactMap { (key, _) in
-            if let key = key.makeString(from: pointer) {
+            if let key = key.makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
                 return Key(stringValue: key)
             }
             
@@ -154,7 +150,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
-        if let value = value(forKey: key), let string = value.makeString(from: pointer) {
+        if let value = value(forKey: key), let string = value.makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
             return string
         }
         
@@ -305,7 +301,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode(_ type: String.Type) throws -> String {
-        if let string = nextValue.makeString(from: pointer) {
+        if let string = nextValue.makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
             currentIndex = currentIndex &+ 1
             return string
         }
@@ -428,7 +424,7 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     }
     
     func decode(_ type: String.Type) throws -> String {
-        if let string = value.makeString(from: pointer) {
+        if let string = value.makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
             return string
         }
         
@@ -452,83 +448,51 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     }
     
     func decode(_ type: Int.Type) throws -> Int {
-        if let int = value.makeInt(from: pointer) {
-            return int
-        }
-        
-        throw JSONError.decodingError(expected: Int.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: Int8.Type) throws -> Int8 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: Int8.self)
-        }
-        
-        throw JSONError.decodingError(expected: Int8.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: Int16.Type) throws -> Int16 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: Int16.self)
-        }
-        
-        throw JSONError.decodingError(expected: Int16.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: Int32.Type) throws -> Int32 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: Int32.self)
-        }
-        
-        throw JSONError.decodingError(expected: Int32.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: Int64.Type) throws -> Int64 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: Int64.self)
-        }
-        
-        throw JSONError.decodingError(expected: Int64.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: UInt.Type) throws -> UInt {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: UInt.self)
-        }
-        
-        throw JSONError.decodingError(expected: UInt.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: UInt8.Type) throws -> UInt8 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: UInt8.self)
-        }
-        
-        throw JSONError.decodingError(expected: UInt8.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: UInt16.Type) throws -> UInt16 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: UInt16.self)
-        }
-        
-        throw JSONError.decodingError(expected: UInt16.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: UInt32.Type) throws -> UInt32 {
-        if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: UInt32.self)
-        }
-        
-        throw JSONError.decodingError(expected: UInt32.self, keyPath: codingPath)
+        return try decodeInt(ofType: type)
     }
     
     func decode(_ type: UInt64.Type) throws -> UInt64 {
+        return try decodeInt(ofType: type)
+    }
+    
+    func decodeInt<F: FixedWidthInteger>(ofType type: F.Type) throws -> F {
         if let int = value.makeInt(from: pointer) {
-            return try int.convert(to: UInt64.self)
+            return try int.convert(to: type)
         }
         
-        throw JSONError.decodingError(expected: UInt64.self, keyPath: codingPath)
+        throw JSONError.decodingError(expected: type, keyPath: codingPath)
     }
     
     func decode<T>(_ type: T.Type) throws -> T where T : Decodable {

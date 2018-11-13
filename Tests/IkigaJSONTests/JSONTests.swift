@@ -2,13 +2,46 @@ import XCTest
 import Foundation
 @testable import IkigaJSON
 
-var newParser: IkigaJSONDeocder {
-    return IkigaJSONDeocder()
-//var newParser: Foundation.JSONDecoder {
-//    return Foundation.JSONDecoder()
+var newParser: IkigaJSONDecoder {
+    return IkigaJSONDecoder()
+}
+
+var newEncoder: IkigaJSONEncoder {
+    return IkigaJSONEncoder()
 }
 
 final class IkigaJSONTests: XCTestCase {
+    func testEncoding() throws {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "awesome": [true, false,     false, false,true],
+            "flag": "🇳🇱"
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        let test = try newParser.decode(Test.self, from: json)
+        XCTAssertEqual(test.yes, "✅")
+        XCTAssertEqual(test.bug, "🐛")
+        XCTAssertEqual(test.awesome, [true,false,false,false,true])
+        XCTAssertEqual(test.flag, "🇳🇱")
+        
+        let jsonData = try newEncoder.encode(test)
+        let test2 = try newParser.decode(Test.self, from: jsonData)
+        XCTAssertEqual(test2.yes, "✅")
+        XCTAssertEqual(test2.bug, "🐛")
+        XCTAssertEqual(test2.awesome, [true,false,false,false,true])
+        XCTAssertEqual(test2.flag, "🇳🇱")
+    }
+    
     func testEmojis() throws {
         let json = """
         {
@@ -194,25 +227,25 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(object.pairs.count, 5)
         
         let keys = object.pairs.compactMap { (key, _) in
-            return key.makeString(from: bytes)
+            return key.makeString(from: bytes, unicode: false)
         }
         
         XCTAssertEqual(keys, ["id", "username", "role", "awesome", "superAwesome"])
         
         if case .string(let string) = object.pairs[0].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes), "0")
+            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "0")
         } else {
             XCTFail("Not a string")
         }
         
         if case .string(let string) = object.pairs[1].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes), "Joannis")
+            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "Joannis")
         } else {
             XCTFail("Not a string")
         }
         
         if case .string(let string) = object.pairs[2].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes), "admin")
+            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "admin")
         } else {
             XCTFail("Not a string")
         }

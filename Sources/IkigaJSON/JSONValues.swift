@@ -21,12 +21,11 @@ internal struct _JSONString {
     let length: Int
     let escaping: Bool
     
-    // TODO: Escaped characters, unicode etc
-    func makeString(from pointer: UnsafePointer<UInt8>) -> String? {
+    func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
         var data = Data(bytes: pointer + offset, count: length)
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
-        if escaping {
+        if escaping || unicode {
             var length = self.length
             var i = 0
             
@@ -37,36 +36,75 @@ internal struct _JSONString {
                 
                 let byte = data[i]
                 
-                if byte != .backslash || i &+ 1 >= length {
+                unescape: if escaping {
+                    if byte != .backslash || i &+ 1 >= length {
+                        break unescape
+                    }
+                    
+                    data.remove(at: i)
+                    length = length &- 1
+                    
+                    switch data[i] {
+                    case .backslash, .solidus, .quote:
+                        continue next // just removal needed
+                    case .u:
+                        data.remove(at: i)
+                        length = length &- 1
+                        _JSONString.decodeUnicode(from: &data, offset: i, length: &length)
+                    case .t:
+                        data[i] = .tab
+                    case .r:
+                        data[i] = .carriageReturn
+                    case .n:
+                        data[i] = .newLine
+                    case .f: // form feed, unsupported
+                        return nil
+                    case .b: // backspace, unsupported
+                        return nil
+                    default:
+                        // Try unicode decoding
+                        break unescape
+                    }
+                    
                     continue next
-                }
-                
-                data.remove(at: i)
-                length = length &- 1
-                
-                switch data[i] {
-                case .backslash, .solidus, .quote:
-                    continue next // just removal needed
-                case .u:
-                    // Unicode
-                    fatalError()
-                case .t:
-                    data[i] = .tab
-                case .r:
-                    data[i] = .carriageReturn
-                case .n:
-                    data[i] = .newLine
-                case .f: // form feed, unsupported
-                    return nil
-                case .b: // backspace, unsupported
-                    return nil
-                default:
-                    return nil // Invalid escaping
                 }
             }
         }
         
         return String(data: data, encoding: .utf8)
+    }
+    
+    static func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
+        var offset = offset
+        
+        return data.withUnsafeMutableBytes { (bytes: UnsafeMutablePointer<UInt8>) in
+            let bytes = bytes.advanced(by: offset)
+            
+            while offset < length {
+                guard let base = bytes[offset].decodeHex(), let secondHex = bytes[offset &+ 1].decodeHex() else {
+                    return
+                }
+                
+                bytes.pointee = (base << 4) &+ secondHex
+                length = length &- 1
+                offset = offset &+ 2
+            }
+        }
+    }
+}
+
+fileprivate let lowercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
+fileprivate let uppercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
+
+extension UInt8 {
+    func decodeHex() -> UInt8? {
+        if let num = lowercasedRadix16table.index(of: self) {
+            return numericCast(num)
+        } else if let num = uppercasedRadix16table.index(of: self) {
+            return numericCast(num)
+        } else {
+            return nil
+        }
     }
 }
 
@@ -132,9 +170,9 @@ internal struct JSONValue {
         }
     }
     
-    internal func makeString(from pointer: UnsafePointer<UInt8>) -> String? {
+    internal func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
         if case .string(let range) = storage {
-            return range.makeString(from: pointer)
+            return range.makeString(from: pointer, unicode: unicode)
         }
         
         return nil
