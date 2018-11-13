@@ -15,14 +15,19 @@ public struct IkigaJSONDecoder {
         self.settings = settings
     }
     
+    public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
+        let pointer = buffer.baseAddress!
+        let value = try JSONParser.scanValue(fromPointer: pointer, count: buffer.count)
+        
+        let decoder = _JSONDecoder(value: value, pointer: pointer, settings: settings)
+        return try D(from: decoder)
+    }
+    
     public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
-        let size = data.count
+        let count = data.count
         
         return try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
-            let value = try JSONParser.scanValue(fromPointer: pointer, count: size)
-            
-            let decoder = _JSONDecoder(value: value, pointer: pointer, settings: settings)
-            return try D(from: decoder)
+            return try decode(type, from: UnsafeBufferPointer(start: pointer, count: count))
         }
     }
 }
