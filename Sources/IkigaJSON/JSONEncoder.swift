@@ -1,14 +1,34 @@
 import Foundation
 
+/// These settings influence the encoding process.
 public struct JSONEncoderSettings {
     public init() {}
     
+    /// This userInfo is accessible by the Eecodable types that are being encoded
     public var userInfo = [CodingUserInfoKey : Any]()
+    
+    /// If a `nil` value is found, setting this to `true` will encode `null`. Otherwise the key is omitted.
+    ///
+    /// This is `false` by default
     public var encodeNilAsNull = false
+    
+    // TODO: Support
+    
+    /// Defines the method used when encode keys
+    public var keyDecodingStrategy = JSONEncoder.KeyEncodingStrategy.useDefaultKeys
+    
+    /// The method used to encode Foundation `Date` types
+    public var dateDecodingStrategy = JSONEncoder.DateEncodingStrategy.deferredToDate
+    
+    /// The method used to encode Foundation `Data` types
+    public var dataDecodingStrategy = JSONEncoder.DataEncodingStrategy.base64
 }
 
+/// A JSON Encoder that aims to be largely functionally equivalent to Foundation.JSONEncoder.
 public struct IkigaJSONEncoder {
     public var userInfo = [CodingUserInfoKey : Any]()
+    
+    /// These settings influence the encoding process.
     public var settings = JSONEncoderSettings()
     
     public init() {}

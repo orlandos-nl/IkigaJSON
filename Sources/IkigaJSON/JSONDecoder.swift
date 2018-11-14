@@ -1,20 +1,46 @@
 import Foundation
 
+/// These settings can be used to alter the decoding process.
 public struct JSONDecoderSettings {
     public init() {}
     
+    /// This userInfo is accessible by the Decodable types that are being created
     public var userInfo = [CodingUserInfoKey : Any]()
+    
+    /// When strings are read, no extra effort is put into decoding unicode characters such as `\u00ff`
+    ///
+    /// `true` by default
     public var decodeUnicode = true
+    
+    /// When a key is not set in the JSON Object it is regarded as `null` if the value is `true`.
+    ///
+    /// `true` by default
     public var decodeMissingKeyAsNil = true
+    
+    // TODO: Support
+    
+    /// Defines the method used when decoding keys
+    public var keyDecodingStrategy = JSONDecoder.KeyDecodingStrategy.useDefaultKeys
+    
+    /// The method used to decode Foundation `Date` types
+    public var dateDecodingStrategy = JSONDecoder.DateDecodingStrategy.deferredToDate
+    
+    /// The method used to decode Foundation `Data` types
+    public var dataDecodingStrategy = JSONDecoder.DataDecodingStrategy.base64
 }
 
+/// A JSON Decoder that aims to be largely functionally equivalent to Foundation.JSONDecoder with more for optimization.
 public struct IkigaJSONDecoder {
+    /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
         self.settings = settings
     }
     
+    /// Parses the Decodable type from an UnsafeBufferPointer.
+    /// This API can be used when the data wasn't originally available as `Data` so you remove the need for copying data.
+    /// This can save a lot of performance.
     public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
         let pointer = buffer.baseAddress!
         let value = try JSONParser.scanValue(fromPointer: pointer, count: buffer.count)
@@ -23,6 +49,7 @@ public struct IkigaJSONDecoder {
         return try D(from: decoder)
     }
     
+    /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
         let count = data.count
         
