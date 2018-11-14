@@ -84,6 +84,7 @@ extension UInt8 {
     static let nine: UInt8 = 0x39
     static let colon: UInt8 = 0x3a
     static let E: UInt8 = 0x45
+    static let underscore: UInt8 = 0x5f
     static let a: UInt8 = 0x61
     static let b: UInt8 = 0x62
     static let e: UInt8 = 0x65
@@ -94,6 +95,7 @@ extension UInt8 {
     static let s: UInt8 = 0x73
     static let t: UInt8 = 0x74
     static let u: UInt8 = 0x75
+    static let z: UInt8 = 0x7a
     static let squareLeft: UInt8 = 0x5b
     static let backslash: UInt8 = 0x5c
     static let squareRight: UInt8 = 0x5d

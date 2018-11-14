@@ -9,6 +9,8 @@ internal enum JSONError: Error {
         case expectedArrayClose
     }
     
+    case invalidDate(String?)
+    case invalidData(String?)
     case missingKeyedContainer
     case missingUnkeyedContainer
     case decodingError(expected: Any.Type, keyPath: [CodingKey])

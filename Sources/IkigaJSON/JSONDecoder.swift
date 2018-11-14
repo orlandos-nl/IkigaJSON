@@ -1,5 +1,29 @@
 import Foundation
 
+@available(OSX 10.12, *)
+let isoFormatter = ISO8601DateFormatter()
+let dateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
+    return formatter
+}()
+    
+func date(from string: String) throws -> Date {
+    if #available(OSX 10.12, iOS 11, *) {
+        guard let date = isoFormatter.date(from: string) else {
+            throw JSONError.invalidDate(string)
+        }
+        
+        return date
+    } else {
+        guard let date = dateFormatter.date(from: string) else {
+            throw JSONError.invalidDate(string)
+        }
+        
+        return date
+    }
+}
+
 /// These settings can be used to alter the decoding process.
 public struct JSONDecoderSettings {
     public init() {}
@@ -16,8 +40,6 @@ public struct JSONDecoderSettings {
     ///
     /// `true` by default
     public var decodeMissingKeyAsNil = true
-    
-    // TODO: Support
     
     /// Defines the method used when decoding keys
     public var keyDecodingStrategy = JSONDecoder.KeyDecodingStrategy.useDefaultKeys
@@ -95,6 +117,74 @@ fileprivate struct _JSONDecoder: Decoder {
         self.pointer = pointer
         self.settings = settings
     }
+    
+    func decode<D: Decodable>(_ type: D.Type, from value: JSONValue) throws -> D {
+        switch type {
+        case is Date.Type:
+            switch self.settings.dateDecodingStrategy {
+            case .deferredToDate:
+                break
+            case .secondsSince1970:
+                if let seconds = value.makeInt(from: self.pointer) {
+                    return Date(timeIntervalSince1970: TimeInterval(seconds)) as! D
+                } else if let seconds = value.makeDouble(from: self.pointer) {
+                    return Date(timeIntervalSince1970: seconds) as! D
+                } else {
+                    throw JSONError.invalidDate(nil)
+                }
+            case .millisecondsSince1970:
+                if let seconds = value.makeInt(from: self.pointer) {
+                    return Date(timeIntervalSince1970: TimeInterval(seconds * 1000)) as! D
+                } else if let seconds = value.makeDouble(from: self.pointer) {
+                    return Date(timeIntervalSince1970: seconds * 1000) as! D
+                } else {
+                    throw JSONError.invalidDate(nil)
+                }
+            case .iso8601:
+                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
+                    throw JSONError.invalidDate(nil)
+                }
+                
+                return try date(from: string) as! D
+            case .formatted(let formatter):
+                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
+                    throw JSONError.invalidDate(nil)
+                }
+                
+                guard let date = formatter.date(from: string) else {
+                    throw JSONError.invalidDate(string)
+                }
+                
+                return date as! D
+            case .custom(let makeDate):
+                let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.settings)
+                return try makeDate(decoder) as! D
+            }
+        case is Data.Type:
+            switch self.settings.dataDecodingStrategy {
+            case .deferredToData:
+                break
+            case .base64:
+                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
+                    throw JSONError.invalidData(nil)
+                }
+                
+                guard let data = Data(base64Encoded: string) else {
+                    throw JSONError.invalidData(string)
+                }
+                
+                return data as! D
+            case .custom(let makeData):
+                let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.settings)
+                return try makeData(decoder) as! D
+            }
+        default:
+            break
+        }
+        
+        let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.settings)
+        return try D.init(from: decoder)
+    }
 }
 
 fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
@@ -115,8 +205,34 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         }
     }
     
+    func string(forKey key: Key) -> String {
+        switch self.decoder.settings.keyDecodingStrategy {
+        case .useDefaultKeys:
+            return key.stringValue
+        case .convertFromSnakeCase:
+            var characters = [UInt8](key.stringValue.utf8)
+            let size = characters.count
+            
+            for i in 0..<size {
+                if characters[i] == .underscore, i &+ 1 < size {
+                    let byte = characters[i &+ 1]
+                    
+                    if byte >= .a && byte <= .z {
+                        characters[i] = byte &- 0x20
+                        characters.remove(at: i &+ 1)
+                    }
+                }
+            }
+            
+            // The string was guaranteed by us to still be valid UTF-8
+            return String(bytes: characters, encoding: .utf8)!
+        case .custom(let builder):
+            return builder(codingPath + [key]).stringValue
+        }
+    }
+    
     func index(of key: Key) -> Int? {
-        let string = key.stringValue
+        let string = self.string(forKey: key)
         let length = string.utf8.count
         
         return string.withCString { pointer in
@@ -151,7 +267,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func value(forKey key: Key) -> JSONValue? {
-        let string = key.stringValue
+        let string = self.string(forKey: key)
         let length = string.utf8.count
         
         return string.withCString { pointer in
@@ -265,8 +381,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             throw JSONError.decodingError(expected: T.self, keyPath: codingPath)
         }
         
-        let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.decoder.settings)
-        return try T.init(from: decoder)
+        return try decoder.decode(type, from: value)
     }
     
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
@@ -310,7 +425,11 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         return array.values.count
     }
     
-    var nextValue: JSONValue {
+    func nextValue() throws -> JSONValue {
+        guard currentIndex < array.values.count else {
+            throw JSONError.missingData
+        }
+        
         return array.values[currentIndex]
     }
     
@@ -318,13 +437,13 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     var currentIndex: Int
     
     mutating func decodeNil() throws -> Bool {
-        let null = nextValue.isNull
+        let null = try nextValue().isNull
         currentIndex = currentIndex &+ 1
         return null
     }
     
     mutating func decode(_ type: Bool.Type) throws -> Bool {
-        if let bool = nextValue.bool {
+        if let bool = try nextValue().bool {
             currentIndex = currentIndex &+ 1
             return bool
         }
@@ -333,7 +452,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode(_ type: String.Type) throws -> String {
-        if let string = nextValue.makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
+        if let string = try nextValue().makeString(from: pointer, unicode: decoder.settings.decodeUnicode) {
             currentIndex = currentIndex &+ 1
             return string
         }
@@ -342,7 +461,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode(_ type: Double.Type) throws -> Double {
-        if let double = nextValue.makeDouble(from: pointer) {
+        if let double = try nextValue().makeDouble(from: pointer) {
             currentIndex = currentIndex &+ 1
             return double
         }
@@ -351,7 +470,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode(_ type: Float.Type) throws -> Float {
-        if let double = nextValue.makeDouble(from: pointer) {
+        if let double = try nextValue().makeDouble(from: pointer) {
             currentIndex = currentIndex &+ 1
             return Float(double)
         }
@@ -360,7 +479,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decodeInt<F: FixedWidthInteger>(_ type: F.Type) throws -> F {
-        if let int = nextValue.makeInt(from: pointer) {
+        if let int = try nextValue().makeInt(from: pointer) {
             currentIndex = currentIndex &+ 1
             return try int.convert(to: F.self)
         }
@@ -369,7 +488,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode(_ type: Int.Type) throws -> Int {
-        if let int = nextValue.makeInt(from: pointer) {
+        if let int = try nextValue().makeInt(from: pointer) {
             currentIndex = currentIndex &+ 1
             return int
         }
@@ -414,19 +533,19 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        let decoder = _JSONDecoder(value: nextValue, pointer: pointer, settings: self.decoder.settings)
+        let value = try nextValue()
         currentIndex = currentIndex &+ 1
-        return try T(from: decoder)
+        return try decoder.decode(type, from: value)
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
-        let decoder = _JSONDecoder(value: nextValue, pointer: pointer, settings: self.decoder.settings)
+        let decoder = _JSONDecoder(value: try nextValue(), pointer: pointer, settings: self.decoder.settings)
         currentIndex = currentIndex &+ 1
         return try decoder.container(keyedBy: NestedKey.self)
     }
     
     mutating func nestedUnkeyedContainer() throws -> UnkeyedDecodingContainer {
-        let decoder = _JSONDecoder(value: nextValue, pointer: pointer, settings: self.decoder.settings)
+        let decoder = _JSONDecoder(value: try nextValue(), pointer: pointer, settings: self.decoder.settings)
         currentIndex = currentIndex &+ 1
         return try decoder.unkeyedContainer()
     }
@@ -528,8 +647,7 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     }
     
     func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.decoder.settings)
-        return try T.init(from: decoder)
+        return try decoder.decode(type, from: value)
     }
 }
 
