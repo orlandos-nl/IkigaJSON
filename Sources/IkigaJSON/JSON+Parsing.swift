@@ -130,7 +130,9 @@ extension JSONParser {
             
             let start = totalOffset
             advance(length)
-            return JSONValue(storage: .number(offset: start, length: length, floating: floating))
+            let bounds = Bounds(offset: start, length: length)
+            let number = JSONNumber(bounds: bounds, floating: floating)
+            return JSONValue(storage: .number(number))
         default:
             throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedValue)
         }
@@ -176,9 +178,8 @@ extension JSONParser {
                 
                 if !escaped {
                     // Minus the first quote, seocnd quote hasn't been added to offset yet as `defer` didn't trigger
-                    let start = totalOffset &+ 1
-                    let length = offset &- 1
-                    return _JSONString(offset: start, length: length, escaping: didEscape)
+                    let bounds = Bounds(offset: totalOffset &+ 1, length: offset &- 1)
+                    return _JSONString(bounds: bounds, escaping: didEscape)
                 }
             } else if byte == .backslash {
                 didEscape = true

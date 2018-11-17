@@ -240,11 +240,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
                 nextPair: for i in 0..<object.pairs.count {
                     let key = object.pairs[i].key
                     
-                    guard key.length == length else {
+                    guard key.bounds.length == length else {
                         continue nextPair
                     }
                     
-                    if memcmp(pointer, self.pointer + key.offset, length) == 0 {
+                    if memcmp(pointer, self.pointer + key.bounds.offset, length) == 0 {
                         return i
                     }
                 }
@@ -275,11 +275,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
                 nextPair: for i in 0..<object.pairs.count {
                     let pair = object.pairs[i]
                     
-                    guard pair.key.length == length else {
+                    guard pair.key.bounds.length == length else {
                         continue nextPair
                     }
                     
-                    if memcmp(pointer, self.pointer + pair.key.offset, length) == 0 {
+                    if memcmp(pointer, self.pointer + pair.key.bounds.offset, length) == 0 {
                         return pair.value
                     }
                 }

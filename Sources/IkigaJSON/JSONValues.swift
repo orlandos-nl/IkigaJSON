@@ -17,16 +17,15 @@ internal struct JSONArrayDescription {
 }
 
 internal struct _JSONString {
-    let offset: Int
-    let length: Int
+    let bounds: Bounds
     let escaping: Bool
     
     func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        var data = Data(bytes: pointer + offset, count: length)
+        var data = Data(bytes: pointer + bounds.offset, count: bounds.length)
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
         if escaping || unicode {
-            var length = self.length
+            var length = self.bounds.length
             var i = 0
             
             next: while i < length {
@@ -116,10 +115,20 @@ internal struct JSONArray {
     let array: JSONArrayDescription
 }
 
+internal struct JSONNumber {
+    let bounds: Bounds
+    let floating: Bool
+}
+
+internal struct Bounds {
+    let offset: Int
+    let length: Int
+}
+
 internal struct JSONValue {
     internal enum _JSONDescription {
         case string(_JSONString)
-        case number(offset: Int, length: Int, floating: Bool)
+        case number(JSONNumber)
         case array(JSONArrayDescription)
         case object(JSONObjectDescription)
         case booleanTrue, booleanFalse
@@ -179,12 +188,12 @@ internal struct JSONValue {
     }
     
     internal func makeDouble(from pointer: UnsafePointer<UInt8>) -> Double? {
-        guard case .number(let start, let length, let floating) = storage else {
+        guard case .number(let number) = storage else {
             return nil
         }
         
         func fallback() -> Double? {
-            let data = Data(bytes: pointer + start, count: length)
+            let data = Data(bytes: pointer + number.bounds.offset, count: number.bounds.length)
             
             if let string = String(data: data, encoding: .utf8) {
                 return Double(string)
@@ -193,9 +202,9 @@ internal struct JSONValue {
             return nil
         }
         
-        var offset = start
+        var offset = number.bounds.offset
         
-        if !floating {
+        if !number.floating {
             guard let int = makeInt(from: pointer) else {
                 return nil
             }
@@ -203,7 +212,7 @@ internal struct JSONValue {
             return Double(exactly: int)
         }
         
-        let end = offset &+ length
+        let end = offset &+ number.bounds.length
         var exponentPow10 = 0
         var fullStop = false
         var significand: Int = numericCast(pointer[offset] &- 0x30)
@@ -285,11 +294,13 @@ internal struct JSONValue {
     }
     
     internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
-        guard case .number(var offset, let length, let floating) = storage, !floating else {
+        guard case .number(let number) = storage, !number.floating else {
             return nil
         }
         
-        return pointer.makeInt(offset: &offset, length: length)
+        var offset = number.bounds.offset
+        
+        return pointer.makeInt(offset: &offset, length: number.bounds.length)
     }
     
     let storage: _JSONDescription
