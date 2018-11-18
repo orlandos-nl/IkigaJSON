@@ -1,31 +1,30 @@
 import Foundation
 
-internal struct JSONObjectDescription {
-    var pairs = [(key: _JSONString, value: JSONValue)]()
-    
-    init() {
-        pairs.reserveCapacity(16)
+fileprivate let lowercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
+fileprivate let uppercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
+
+extension UInt8 {
+    func decodeHex() -> UInt8? {
+        if let num = lowercasedRadix16table.index(of: self) {
+            return numericCast(num)
+        } else if let num = uppercasedRadix16table.index(of: self) {
+            return numericCast(num)
+        } else {
+            return nil
+        }
     }
 }
 
-internal struct JSONArrayDescription {
-    var values = [JSONValue]()
+internal struct Bounds {
+    let offset: Int
+    let length: Int
     
-    init() {
-        values.reserveCapacity(64)
-    }
-}
-
-internal struct _JSONString {
-    let bounds: Bounds
-    let escaping: Bool
-    
-    func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        var data = Data(bytes: pointer + bounds.offset, count: bounds.length)
+    func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
+        var data = Data(bytes: pointer + offset, count: length)
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
         if escaping || unicode {
-            var length = self.bounds.length
+            var length = self.length
             var i = 0
             
             next: while i < length {
@@ -49,7 +48,7 @@ internal struct _JSONString {
                     case .u:
                         data.remove(at: i)
                         length = length &- 1
-                        _JSONString.decodeUnicode(from: &data, offset: i, length: &length)
+                        decodeUnicode(from: &data, offset: i, length: &length)
                     case .t:
                         data[i] = .tab
                     case .r:
@@ -73,127 +72,9 @@ internal struct _JSONString {
         return String(data: data, encoding: .utf8)
     }
     
-    static func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
-        var offset = offset
-        
-        return data.withUnsafeMutableBytes { (bytes: UnsafeMutablePointer<UInt8>) in
-            let bytes = bytes.advanced(by: offset)
-            
-            while offset < length {
-                guard let base = bytes[offset].decodeHex(), let secondHex = bytes[offset &+ 1].decodeHex() else {
-                    return
-                }
-                
-                bytes.pointee = (base << 4) &+ secondHex
-                length = length &- 1
-                offset = offset &+ 2
-            }
-        }
-    }
-}
-
-fileprivate let lowercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
-fileprivate let uppercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
-
-extension UInt8 {
-    func decodeHex() -> UInt8? {
-        if let num = lowercasedRadix16table.index(of: self) {
-            return numericCast(num)
-        } else if let num = uppercasedRadix16table.index(of: self) {
-            return numericCast(num)
-        } else {
-            return nil
-        }
-    }
-}
-
-internal struct JSONObject {
-    let object: JSONObjectDescription
-}
-
-internal struct JSONArray {
-    let array: JSONArrayDescription
-}
-
-internal struct JSONNumber {
-    let bounds: Bounds
-    let floating: Bool
-}
-
-internal struct Bounds {
-    let offset: Int
-    let length: Int
-}
-
-internal struct JSONValue {
-    internal enum _JSONDescription {
-        case string(_JSONString)
-        case number(JSONNumber)
-        case array(JSONArrayDescription)
-        case object(JSONObjectDescription)
-        case booleanTrue, booleanFalse
-        case null
-    }
-    
-    internal var isNull: Bool {
-        if case .null = storage {
-            return true
-        }
-        
-        return false
-    }
-    
-    internal var bool: Bool? {
-        switch storage {
-        case .booleanTrue:
-            return true
-        case .booleanFalse:
-            return false
-        default:
-            return nil
-        }
-    }
-    
-    internal var isObject: Bool {
-        if case .object = storage {
-            return true
-        }
-        
-        return false
-    }
-    
-    internal var isArray: Bool {
-        if case .array = storage {
-            return true
-        }
-        
-        return false
-    }
-    
-    internal var isBoolean: Bool {
-        switch storage {
-        case .booleanTrue, .booleanFalse:
-            return true
-        default:
-            return false
-        }
-    }
-    
-    internal func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        if case .string(let range) = storage {
-            return range.makeString(from: pointer, unicode: unicode)
-        }
-        
-        return nil
-    }
-    
-    internal func makeDouble(from pointer: UnsafePointer<UInt8>) -> Double? {
-        guard case .number(let number) = storage else {
-            return nil
-        }
-        
+    internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double? {
         func fallback() -> Double? {
-            let data = Data(bytes: pointer + number.bounds.offset, count: number.bounds.length)
+            let data = Data(bytes: pointer + self.offset, count: length)
             
             if let string = String(data: data, encoding: .utf8) {
                 return Double(string)
@@ -202,9 +83,9 @@ internal struct JSONValue {
             return nil
         }
         
-        var offset = number.bounds.offset
+        var offset = self.offset
         
-        if !number.floating {
+        if !floating {
             guard let int = makeInt(from: pointer) else {
                 return nil
             }
@@ -212,7 +93,7 @@ internal struct JSONValue {
             return Double(exactly: int)
         }
         
-        let end = offset &+ number.bounds.length
+        let end = offset &+ length
         var exponentPow10 = 0
         var fullStop = false
         var significand: Int = numericCast(pointer[offset] &- 0x30)
@@ -294,20 +175,26 @@ internal struct JSONValue {
     }
     
     internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
-        guard case .number(let number) = storage, !number.floating else {
-            return nil
-        }
+        var offset = self.offset
         
-        var offset = number.bounds.offset
-        
-        return pointer.makeInt(offset: &offset, length: number.bounds.length)
+        return pointer.makeInt(offset: &offset, length: length)
     }
+}
+
+fileprivate func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
+    var offset = offset
     
-    let storage: _JSONDescription
-    
-    // These don't need an offset or length
-    
-    static let null = JSONValue(storage: .null)
-    static let booleanTrue = JSONValue(storage: .booleanTrue)
-    static let booleanFalse = JSONValue(storage: .booleanFalse)
+    return data.withUnsafeMutableBytes { (bytes: UnsafeMutablePointer<UInt8>) in
+        let bytes = bytes.advanced(by: offset)
+        
+        while offset < length {
+            guard let base = bytes[offset].decodeHex(), let secondHex = bytes[offset &+ 1].decodeHex() else {
+                return
+            }
+            
+            bytes.pointee = (base << 4) &+ secondHex
+            length = length &- 1
+            offset = offset &+ 2
+        }
+    }
 }

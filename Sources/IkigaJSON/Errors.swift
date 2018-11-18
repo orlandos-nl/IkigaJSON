@@ -9,6 +9,7 @@ internal enum JSONError: Error {
         case expectedArrayClose
     }
     
+    case internalStateError
     case invalidDate(String?)
     case invalidData(String?)
     case missingKeyedContainer

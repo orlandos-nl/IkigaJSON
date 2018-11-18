@@ -1,76 +1,88 @@
 extension JSONParser {
-    internal mutating func scanArray() throws -> JSONArrayDescription {
-        assert(pointer.pointee == .squareLeft, "An object was scanned but the first byte was not `{`")
+    internal mutating func scanArray(into description: JSONDescription) throws {
+        assert(pointer.pointee == .squareLeft, "An array was scanned but the first byte was not `[`")
         
         var didParseFirstValue = false
-        advance(1)
-        var description = JSONArrayDescription()
         
-        repeat {
-            try skipWhitespace()
+        try description.describeArray(atOffset: numericCast(totalOffset)) {
+            let offset = totalOffset
+            advance(1)
+            var count: UInt32 = 0
             
-            if pointer.pointee == .squareRight {
-                advance(1)
-                return description
-            } else if didParseFirstValue, nextByte() != .comma {
-                throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
-            } else {
-                didParseFirstValue = true
-            }
+            repeat {
+                try skipWhitespace()
+                
+                if pointer.pointee == .squareRight {
+                    advance(1)
+                    return _ArrayObjectDescription(count: count, byteCount: UInt32(totalOffset &- offset))
+                } else if didParseFirstValue, nextByte() != .comma {
+                    throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
+                } else {
+                    didParseFirstValue = true
+                }
+                
+                try skipWhitespace() // needed because of the comma
+                try scanValue(into: description)
+                
+                count = count &+ 1
+            } while hasMoreData
             
-            try skipWhitespace() // needed because of the comma
-            let value = try scanValue()
-            
-            description.values.append(value)
-        } while hasMoreData
-        
-        throw JSONError.unexpectedToken(.curlyRight, reason: .expectedArrayClose)
+            throw JSONError.missingData
+        }
     }
     
-    internal mutating func scanObject() throws -> JSONObjectDescription {
+    internal mutating func scanObject(into description: JSONDescription) throws {
         assert(pointer.pointee == .curlyLeft, "An object was scanned but the first byte was not `{`")
         
-        var didParseFirstPair = false
-        advance(1)
-        var description = JSONObjectDescription()
+        var didParseFirstValue = false
         
-        repeat {
-            try skipWhitespace()
+        try description.describeObject(atOffset: numericCast(totalOffset)) {
+            let offset = totalOffset
+            advance(1)
+            var count: UInt32 = 0
             
-            if pointer.pointee == .curlyRight {
-                advance(1)
-                return description
-            } else if didParseFirstPair, nextByte() != .comma {
-                throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
-            } else {
-                didParseFirstPair = true
-            }
+            repeat {
+                try skipWhitespace()
+                
+                if pointer.pointee == .curlyRight {
+                    advance(1)
+                    return _ArrayObjectDescription(count: count, byteCount: UInt32(totalOffset &- offset))
+                } else if didParseFirstValue, nextByte() != .comma {
+                    throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
+                } else {
+                    didParseFirstValue = true
+                }
+                
+                try skipWhitespace() // needed because of the comma
+                try scanStringLiteral(into: description)
+                try skipWhitespace()
+                
+                guard nextByte() == .colon else {
+                    throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedColon)
+                }
+                
+                try skipWhitespace()
+                try scanValue(into: description)
+                
+                count = count &+ 1
+            } while hasMoreData
             
-            try skipWhitespace() // needed because of the comma
-            let key = try scanStringLiteral()
-            try skipWhitespace()
-            
-            guard nextByte() == .colon else {
-                throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedColon)
-            }
-            
-            try skipWhitespace()
-            let value = try scanValue()
-            
-            description.pairs.append((key: key, value: value))
-        } while hasMoreData
-        
-        throw JSONError.unexpectedToken(.curlyRight, reason: .expectedObjectClose)
+            throw JSONError.missingData
+        }
     }
     
-    internal mutating func scanValue() throws -> JSONValue {
+    internal mutating func scanValue(into description: JSONDescription) throws {
+        guard hasMoreData else {
+            throw JSONError.missingData
+        }
+        
         switch pointer.pointee {
         case .quote:
-            return try JSONValue(storage: .string(self.scanStringLiteral()))
+            try scanStringLiteral(into: description)
         case .curlyLeft:
-            return try JSONValue(storage: .object(scanObject()))
+            try scanObject(into: description)
         case .squareLeft:
-            return try JSONValue(storage: .array(scanArray()))
+            try scanArray(into: description)
         case .f: // false
             guard count > 5 else {
                 throw JSONError.missingData
@@ -81,7 +93,7 @@ extension JSONParser {
             }
             
             advance(5)
-            return .booleanFalse
+            description.describeFalse()
         case .t: // true
             guard count > 4 else {
                 throw JSONError.missingData
@@ -92,7 +104,7 @@ extension JSONParser {
             }
             
             advance(4)
-            return .booleanTrue
+            description.describeTrue()
         case .n: // null
             guard count > 4 else {
                 throw JSONError.missingData
@@ -103,36 +115,9 @@ extension JSONParser {
             }
             
             advance(4)
-            return .null
+            description.describeNull()
         case .zero ... .nine, .minus:// Numerical
-            var length = 1
-            var floating = false
-            
-            loop: while length < count {
-                let byte = pointer[length]
-                
-                if byte < .zero || byte > .nine {
-                    if byte != .fullStop, byte != .e, byte != .E, byte != .plus, byte != .minus {
-                        break loop
-                    }
-                    
-                    // not a first minus sign
-                    floating = byte != .minus || length > 1
-                }
-                
-                length = length &+ 1
-            }
-            
-            // Only a minus was parsed
-            if floating && length == 1 {
-                throw JSONError.unexpectedToken(.minus, reason: .expectedValue)
-            }
-            
-            let start = totalOffset
-            advance(length)
-            let bounds = Bounds(offset: start, length: length)
-            let number = JSONNumber(bounds: bounds, floating: floating)
-            return JSONValue(storage: .number(number))
+            try scanNumber(into: description)
         default:
             throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedValue)
         }
@@ -144,7 +129,38 @@ extension JSONParser {
         return byte
     }
     
-    internal mutating func scanStringLiteral() throws -> _JSONString {
+    fileprivate mutating func scanNumber(into description: JSONDescription) throws {
+        var length = 1
+        var floating = false
+        
+        loop: while length < count {
+            let byte = pointer[length]
+            
+            if byte < .zero || byte > .nine {
+                if byte != .fullStop, byte != .e, byte != .E, byte != .plus, byte != .minus {
+                    break loop
+                }
+                
+                // not a first minus sign
+                floating = byte != .minus || length > 1
+            }
+            
+            length = length &+ 1
+        }
+        
+        // Only a minus was parsed
+        if floating && length == 1 {
+            throw JSONError.unexpectedToken(.minus, reason: .expectedValue)
+        }
+        
+        let start = totalOffset
+        advance(length)
+        let bounds = Bounds(offset: start, length: length)
+        
+        description.describeNumber(bounds, floatingPoint: floating)
+    }
+    
+    fileprivate mutating func scanStringLiteral(into description: JSONDescription) throws {
         if pointer.pointee != .quote {
             throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedObjectKey)
         }
@@ -179,7 +195,8 @@ extension JSONParser {
                 if !escaped {
                     // Minus the first quote, seocnd quote hasn't been added to offset yet as `defer` didn't trigger
                     let bounds = Bounds(offset: totalOffset &+ 1, length: offset &- 1)
-                    return _JSONString(bounds: bounds, escaping: didEscape)
+                    description.describeString(bounds, escaped: didEscape)
+                    return
                 }
             } else if byte == .backslash {
                 didEscape = true

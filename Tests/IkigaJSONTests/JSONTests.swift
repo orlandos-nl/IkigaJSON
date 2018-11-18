@@ -205,60 +205,6 @@ final class IkigaJSONTests: XCTestCase {
         }
     }
     
-    func testBasic() throws {
-        let json = """
-        {
-            "id": "0",
-            "username": "Joannis",
-            "role": "admin",
-            "awesome": true,
-            "superAwesome": false
-        }
-        """
-        
-        let bytes = [UInt8](json.utf8)
-        let desc = try JSONParser.scanValue(fromPointer: bytes, count: bytes.count)
-        
-        guard case .object(let object) = desc.storage else {
-            XCTFail("Not an object")
-            return
-        }
-        
-        XCTAssertEqual(object.pairs.count, 5)
-        
-        let keys = object.pairs.compactMap { (key, _) in
-            return key.makeString(from: bytes, unicode: false)
-        }
-        
-        XCTAssertEqual(keys, ["id", "username", "role", "awesome", "superAwesome"])
-        
-        if case .string(let string) = object.pairs[0].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "0")
-        } else {
-            XCTFail("Not a string")
-        }
-        
-        if case .string(let string) = object.pairs[1].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "Joannis")
-        } else {
-            XCTFail("Not a string")
-        }
-        
-        if case .string(let string) = object.pairs[2].value.storage {
-            XCTAssertEqual(string.makeString(from: bytes, unicode: false), "admin")
-        } else {
-            XCTFail("Not a string")
-        }
-        
-        guard object.pairs[3].value.bool == true else {
-            return XCTFail("Not true")
-        }
-        
-        guard object.pairs[4].value.bool == false else {
-            return XCTFail("Not a bool")
-        }
-    }
-    
     func testCodablePerformance() throws {
         let data = """
         {
@@ -280,7 +226,6 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     static var allTests = [
-        ("testBasic", testBasic),
         ("testObject", testObject),
         ("testArray", testArray),
         ("testEscaping", testEscaping),
