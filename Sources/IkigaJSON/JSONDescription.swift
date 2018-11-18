@@ -178,8 +178,7 @@ struct ReadOnlyJSONDescription {
         var offset = offset
         
         let count = self.pointer.advanced(by: 1).withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
-        let key = [UInt8](key.utf8)
-        let keySize = key.count
+        let keySize = key.utf8.count
         
         for _ in 0..<count {
             let bounds = self.pointer.advanced(by: offset &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
