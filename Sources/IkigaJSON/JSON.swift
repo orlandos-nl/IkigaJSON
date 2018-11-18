@@ -6,9 +6,22 @@ internal struct JSONParser {
         self.count = count
     }
     
+    internal init() {}
+    
+    internal mutating func initialize(pointer: UnsafePointer<UInt8>, count: Int) {
+        self.pointer = pointer
+        self.count = count
+    }
+    
+    mutating func recycle() {
+        description.recycle()
+        self.totalOffset = 0
+    }
+    
+    internal var description = JSONDescription()
     internal private(set) var totalOffset = 0
-    internal private(set) var pointer: UnsafePointer<UInt8>
-    internal private(set) var count: Int
+    internal private(set) var pointer: UnsafePointer<UInt8>!
+    internal private(set) var count: Int!
     
     internal mutating func advance(_ offset: Int) {
         totalOffset = totalOffset &+ offset
@@ -17,7 +30,8 @@ internal struct JSONParser {
     }
     
     internal var hasMoreData: Bool {
-        return count > 0
+        assert(count >= 0, "The count was reduced into negatives")
+        return count != 0
     }
     
     private func assertMoreData() throws {
@@ -61,9 +75,8 @@ extension JSONParser {
 //    
     internal static func scanValue(fromPointer pointer: UnsafePointer<UInt8>, count: Int) throws -> JSONDescription {
         var parser = JSONParser(pointer: pointer, count: count)
-        let description = JSONDescription()
-        try parser.scanValue(into: description)
-        return description
+        try parser.scanValue()
+        return parser.description
     }
     
 //    internal static func scanObject(fromPointer pointer: UnsafePointer<UInt8>, count: Int) throws -> JSONObject {

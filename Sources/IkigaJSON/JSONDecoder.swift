@@ -55,6 +55,7 @@ public struct JSONDecoderSettings {
 public struct IkigaJSONDecoder {
     /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
+    private var parser = JSONParser()
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
         self.settings = settings
@@ -63,17 +64,19 @@ public struct IkigaJSONDecoder {
     /// Parses the Decodable type from an UnsafeBufferPointer.
     /// This API can be used when the data wasn't originally available as `Data` so you remove the need for copying data.
     /// This can save a lot of performance.
-    public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
+    public mutating func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
         let pointer = buffer.baseAddress!
-        let description = try JSONParser.scanValue(fromPointer: pointer, count: buffer.count)
-        let readOnly = description.readOnly
+        parser.initialize(pointer: pointer, count: buffer.count)
+        try parser.scanValue()
+        let readOnly = parser.description.readOnly
         
         let decoder = _JSONDecoder(description: readOnly, pointer: pointer, settings: settings)
+        parser.recycle()
         return try D(from: decoder)
     }
     
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
-    public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
+    public mutating func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
         let count = data.count
         
         return try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in

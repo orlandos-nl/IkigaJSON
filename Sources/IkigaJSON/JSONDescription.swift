@@ -1,5 +1,28 @@
 import Foundation
 
+final class AutoDeallocatingPointer {
+    var pointer: UnsafeMutablePointer<UInt8>
+    private(set) var totalSize: Int
+    
+    init(size: Int) {
+        self.pointer = .allocate(capacity: size)
+        totalSize = size
+    }
+    
+    func expand(to count: Int, usedCapacity size: Int) {
+        let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        new.assign(from: pointer, count: size)
+        pointer.deallocate()
+        
+        self.totalSize = count
+        self.pointer = new
+    }
+    
+    deinit {
+        pointer.deallocate()
+    }
+}
+
 /// Stores data efficiently to describe JSON to be parsed lazily into a concrete type
 /// from the original buffer
 ///
@@ -12,27 +35,26 @@ import Foundation
 /// - ChildrenLength is a UInt32 with the length of all child indexes
 ///
 /// Objects have 2 JSONElements per registered element. The first element must be a string for the key
-final class JSONDescription {
+struct JSONDescription {
+    private let autoPointer: AutoDeallocatingPointer
     private(set) var pointer: UnsafeMutablePointer<UInt8>
     private(set) var totalSize: Int
     private(set) var size = 0
     
-    deinit {
-        pointer.deallocate()
-    }
-    
     init(size: Int = 512) {
-        self.pointer = .allocate(capacity: size)
-        totalSize = size
+        self.autoPointer = AutoDeallocatingPointer(size: size)
+        self.pointer = autoPointer.pointer
+        self.totalSize = autoPointer.totalSize
     }
     
-    func expand(to count: Int) {
-        let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-        new.assign(from: pointer, count: size)
-        pointer.deallocate()
-        
-        self.totalSize = count
-        self.pointer = new
+    mutating func recycle() {
+        self.size = 0
+    }
+    
+    mutating func expand(to count: Int) {
+        autoPointer.expand(to: count, usedCapacity: size)
+        self.pointer = autoPointer.pointer
+        self.totalSize = autoPointer.totalSize
     }
     
     var readOnly: ReadOnlyJSONDescription {
@@ -43,13 +65,13 @@ final class JSONDescription {
         return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), _super: self)
     }
     
-    func requireCapacity(_ n: Int) {
+    mutating func requireCapacity(_ n: Int) {
         if totalSize &- size < n {
             expand(to: totalSize &* 4)
         }
     }
     
-    func describeNumber(_ number: Bounds, floatingPoint: Bool) {
+    mutating func describeNumber(_ number: Bounds, floatingPoint: Bool) {
         requireCapacity(9)
         pointer[size] = floatingPoint ? JSONType.floatingNumber.rawValue : JSONType.integer.rawValue
         pointer.advanced(by: size &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
@@ -59,7 +81,7 @@ final class JSONDescription {
         size = size &+ 9
     }
     
-    func describeString(_ string: Bounds, escaped: Bool) {
+    mutating func describeString(_ string: Bounds, escaped: Bool) {
         requireCapacity(9)
         pointer[size] = escaped ? JSONType.stringWithEscaping.rawValue : JSONType.string.rawValue
         pointer.advanced(by: size &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
@@ -69,26 +91,26 @@ final class JSONDescription {
         size = size &+ 9
     }
     
-    func describeNull() {
+    mutating func describeNull() {
         requireCapacity(1)
         pointer[size] = JSONType.null.rawValue
         size = size &+ 1
     }
     
-    func describeTrue() {
+    mutating func describeTrue() {
         requireCapacity(1)
         pointer[size] = JSONType.boolTrue.rawValue
         size = size &+ 1
     }
     
-    func describeFalse() {
+    mutating func describeFalse() {
         requireCapacity(1)
         pointer[size] =  JSONType.boolFalse.rawValue
         size = size &+ 1
     }
     
     /// Run returns the amount of elements written
-    func describeArray(atOffset offset: UInt32, _ run: () throws -> _ArrayObjectDescription) rethrows {
+    mutating func describeArray(atOffset offset: Int) -> UnfinishedDescription {
         requireCapacity(17)
         pointer[size] = JSONType.array.rawValue
         let indexStart = size
@@ -97,22 +119,11 @@ final class JSONDescription {
         size = size &+ 17
         let arrayStart = size
         
-        let result = try run()
-        
-        if result.count >= 16_777_216 {
-            fatalError("Unsupported array count")
-        }
-        
-        pointer.advanced(by: indexStart &+ 1).withMemoryRebound(to: UInt32.self, capacity: 4) { pointer in
-            pointer[0] = UInt32(result.count) & 0x00ffffff
-            pointer[1] = offset
-            pointer[2] = result.byteCount
-            pointer[3] = UInt32(size &- arrayStart)
-        }
+        return UnfinishedDescription(dataOffset: offset, indexOffset: indexStart, firtChildIndexOffset: arrayStart)
     }
     
     /// Run returns the amount of elements written
-    func describeObject(atOffset offset: UInt32, _ run: () throws -> _ArrayObjectDescription) rethrows {
+    mutating func describeObject(atOffset offset: Int) -> UnfinishedDescription {
         requireCapacity(17)
         pointer[size] = JSONType.object.rawValue
         let indexStart = size
@@ -121,19 +132,27 @@ final class JSONDescription {
         size = size &+ 17
         let objectStart = size
         
-        let result = try run()
-        
+        return UnfinishedDescription(dataOffset: offset, indexOffset: indexStart, firtChildIndexOffset: objectStart)
+    }
+    
+    func complete(_ unfinished: UnfinishedDescription , withResult result: _ArrayObjectDescription) {
         if result.count >= 16_777_216 {
             fatalError("Unsupported array count")
         }
         
-        pointer.advanced(by: indexStart &+ 1).withMemoryRebound(to: UInt32.self, capacity: 3) { pointer in
+        pointer.advanced(by: unfinished.indexOffset &+ 1).withMemoryRebound(to: UInt32.self, capacity: 4) { pointer in
             pointer[0] = UInt32(result.count) & 0x00ffffff
-            pointer[1] = offset
+            pointer[1] = numericCast(unfinished.dataOffset)
             pointer[2] = result.byteCount
-            pointer[3] = UInt32(size &- objectStart)
+            pointer[3] = UInt32(size &- unfinished.firtChildIndexOffset)
         }
     }
+}
+
+struct UnfinishedDescription {
+    fileprivate let dataOffset: Int
+    fileprivate let indexOffset: Int
+    fileprivate let firtChildIndexOffset: Int
 }
 
 struct ReadOnlyJSONDescription {
