@@ -2,9 +2,9 @@ import XCTest
 import Foundation
 import IkigaJSON
 
-var newParser: IkigaJSONDecoder = {
+var newParser: IkigaJSONDecoder {
     return IkigaJSONDecoder()
-}()
+}
 
 var newEncoder: IkigaJSONEncoder {
     return IkigaJSONEncoder()

@@ -52,7 +52,7 @@ public struct JSONDecoderSettings {
 }
 
 /// A JSON Decoder that aims to be largely functionally equivalent to Foundation.JSONDecoder with more for optimization.
-public struct IkigaJSONDecoder {
+public final class IkigaJSONDecoder {
     /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
     private var parser = JSONParser()
@@ -64,7 +64,7 @@ public struct IkigaJSONDecoder {
     /// Parses the Decodable type from an UnsafeBufferPointer.
     /// This API can be used when the data wasn't originally available as `Data` so you remove the need for copying data.
     /// This can save a lot of performance.
-    public mutating func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
+    public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
         let pointer = buffer.baseAddress!
         parser.initialize(pointer: pointer, count: buffer.count)
         try parser.scanValue()
@@ -77,7 +77,7 @@ public struct IkigaJSONDecoder {
     }
     
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
-    public mutating func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
+    public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
         let count = data.count
         
         return try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
@@ -381,7 +381,6 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
-        print(Array(UnsafeBufferPointer(start: decoder.description.pointer, count: decoder.description.size)))
         guard
             let (bounds, floating) = floatingBounds(forKey: key),
             let double = bounds.makeDouble(from: decoder.pointer, floating: floating)
