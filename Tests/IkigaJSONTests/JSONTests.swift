@@ -238,6 +238,7 @@ final class IkigaJSONTests: XCTestCase {
             "piD": 3.14,
             "piF": 0.314e1,
             "piFm": 314e-2,
+            "piFp": 0.0314e+2,
             "u8": 255,
             "u8zero": 0,
             "i8": -127,
@@ -250,6 +251,7 @@ final class IkigaJSONTests: XCTestCase {
             let piD: Double
             let piF: Float
             let piFm: Float
+            let piFp: Float
             let u8: UInt8
             let u8zero: UInt8
             let i8: Int8
@@ -262,6 +264,7 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(stuff.piD, 3.14)
         XCTAssertEqual(stuff.piF, 3.14)
         XCTAssertEqual(stuff.piFm, 3.14)
+        XCTAssertEqual(stuff.piFp, 3.14)
         XCTAssertEqual(stuff.u8, 255)
         XCTAssertEqual(stuff.u8zero, 0)
         XCTAssertEqual(stuff.i8, -127)

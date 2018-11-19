@@ -8,8 +8,8 @@ IkigaJSON is a really fast JSON parser. It performed ~4x faster in our tests whe
 import IkigaJSON
 
 struct User: Codable {
-	let id: Int
-	let name: String
+    let id: Int
+    let name: String
 }
 
 let data = Data()
