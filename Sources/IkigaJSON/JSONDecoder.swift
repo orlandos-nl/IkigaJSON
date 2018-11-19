@@ -155,71 +155,52 @@ fileprivate struct _JSONDecoder: Decoder {
     }
     
     func decode<D: Decodable>(_ type: D.Type) throws -> D {
-//        switch type {
-//        case is Date.Type:
-//            switch self.settings.dateDecodingStrategy {
-//            case .deferredToDate:
-//                break
-//            case .secondsSince1970:
-//                if let seconds = value.makeInt(from: self.pointer) {
-//                    return Date(timeIntervalSince1970: TimeInterval(seconds)) as! D
-//                } else if let seconds = value.makeDouble(from: self.pointer) {
-//                    return Date(timeIntervalSince1970: seconds) as! D
-//                } else {
-//                    throw JSONError.invalidDate(nil)
-//                }
-//            case .millisecondsSince1970:
-//                if let seconds = value.makeInt(from: self.pointer) {
-//                    return Date(timeIntervalSince1970: TimeInterval(seconds * 1000)) as! D
-//                } else if let seconds = value.makeDouble(from: self.pointer) {
-//                    return Date(timeIntervalSince1970: seconds * 1000) as! D
-//                } else {
-//                    throw JSONError.invalidDate(nil)
-//                }
-//            case .iso8601:
-//                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
-//                    throw JSONError.invalidDate(nil)
-//                }
-//                
-//                return try date(from: string) as! D
-//            case .formatted(let formatter):
-//                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
-//                    throw JSONError.invalidDate(nil)
-//                }
-//                
-//                guard let date = formatter.date(from: string) else {
-//                    throw JSONError.invalidDate(string)
-//                }
-//                
-//                return date as! D
-//            case .custom(let makeDate):
-//                let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.settings)
-//                return try makeDate(decoder) as! D
-//            }
-//        case is Data.Type:
-//            switch self.settings.dataDecodingStrategy {
-//            case .deferredToData:
-//                break
-//            case .base64:
-//                guard let string = value.makeString(from: self.pointer, unicode: self.settings.decodeUnicode) else {
-//                    throw JSONError.invalidData(nil)
-//                }
-//                
-//                guard let data = Data(base64Encoded: string) else {
-//                    throw JSONError.invalidData(string)
-//                }
-//                
-//                return data as! D
-//            case .custom(let makeData):
-//                let decoder = _JSONDecoder(value: value, pointer: pointer, settings: self.settings)
-//                return try makeData(decoder) as! D
-//            }
-//        default:
-//            break
-//        }
-//
-        let decoder = subDecoder(offsetBy: 0)
-        return try D.init(from: decoder)
+        switch type {
+        case is Date.Type:
+            switch self.settings.dateDecodingStrategy {
+            case .deferredToDate:
+                break
+            case .secondsSince1970:
+                let interval = try singleValueContainer().decode(Double.self)
+                return Date(timeIntervalSince1970: interval) as! D
+            case .millisecondsSince1970:
+                let interval = try singleValueContainer().decode(Double.self)
+                return Date(timeIntervalSince1970: interval * 1000) as! D
+            case .iso8601:
+                let string = try singleValueContainer().decode(String.self)
+                
+                return try date(from: string) as! D
+            case .formatted(let formatter):
+                let string = try singleValueContainer().decode(String.self)
+                
+                guard let date = formatter.date(from: string) else {
+                    throw JSONError.invalidDate(string)
+                }
+                
+                return date as! D
+            case .custom(let makeDate):
+                return try makeDate(self) as! D
+            }
+        case is Data.Type:
+            switch self.settings.dataDecodingStrategy {
+            case .deferredToData:
+                break
+            case .base64:
+                let string = try singleValueContainer().decode(String.self)
+                
+                guard let data = Data(base64Encoded: string) else {
+                    throw JSONError.invalidData(string)
+                }
+                
+                return data as! D
+            case .custom(let makeData):
+                return try makeData(self) as! D
+            }
+        default:
+            break
+        }
+
+        return try D.init(from: self)
     }
 }
 
