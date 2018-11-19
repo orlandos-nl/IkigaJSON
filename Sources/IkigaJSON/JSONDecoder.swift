@@ -71,8 +71,9 @@ public struct IkigaJSONDecoder {
         let readOnly = parser.description.readOnly
         
         let decoder = _JSONDecoder(description: readOnly, pointer: pointer, settings: settings)
+        let type = try D(from: decoder)
         parser.recycle()
-        return try D(from: decoder)
+        return type
     }
     
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
@@ -380,11 +381,12 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
+        print(Array(UnsafeBufferPointer(start: decoder.description.pointer, count: decoder.description.size)))
         guard
             let (bounds, floating) = floatingBounds(forKey: key),
             let double = bounds.makeDouble(from: decoder.pointer, floating: floating)
         else {
-            throw JSONError.decodingError(expected: type, keyPath: codingPath)
+            throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
         
         return double

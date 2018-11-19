@@ -62,7 +62,7 @@ struct JSONDescription {
     }
     
     func subDescription(offset: Int) -> ReadOnlyJSONDescription {
-        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), _super: self)
+        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), size: size &- offset, _super: self)
     }
     
     mutating func requireCapacity(_ n: Int) {
@@ -157,15 +157,17 @@ struct UnfinishedDescription {
 
 struct ReadOnlyJSONDescription {
     internal let pointer: UnsafePointer<UInt8>
+    internal let size: Int
     private let _super: JSONDescription
     
-    fileprivate init(pointer: UnsafePointer<UInt8>, _super: JSONDescription) {
+    fileprivate init(pointer: UnsafePointer<UInt8>, size: Int, _super: JSONDescription) {
         self.pointer = pointer
+        self.size = size
         self._super = _super
     }
     
     func subDescription(offset: Int) -> ReadOnlyJSONDescription {
-        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), _super: _super)
+        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), size: self.size &- offset, _super: _super)
     }
     
     var type: JSONType {

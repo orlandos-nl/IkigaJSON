@@ -107,6 +107,8 @@ internal struct Bounds {
                     fullStop = true
                     offset = offset &+ 1
                     continue loop
+                } else if byte == .e || byte == .E {
+                    exponentPow10 = exponentPow10 &- 1
                 }
                 
                 break loop

@@ -1,6 +1,6 @@
 import XCTest
 import Foundation
-@testable import IkigaJSON
+import IkigaJSON
 
 var newParser: IkigaJSONDecoder = {
     return IkigaJSONDecoder()
@@ -11,6 +11,83 @@ var newEncoder: IkigaJSONEncoder {
 }
 
 final class IkigaJSONTests: XCTestCase {
+    func testMissingCommaInObject() {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "awesome": [true, false,     false, false,true]
+            "flag": "🇳🇱"
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
+    func testMissingCommaInArray() {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "awesome": [true false,     false, false,true],
+            "flag": "🇳🇱"
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
+    func testMissingEndOfArray() {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "awesome": [true, false,     false, false,true
+        """.data(using: .utf8)!
+        
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
+    func testMissingEndOfObject() {
+        let json = """
+        {
+            "yes": "✅",
+            "bug": "🐛",
+            "awesome": [true, false,     false, false,true],
+            "flag": "🇳🇱"
+        """.data(using: .utf8)!
+        
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
     func testEncoding() throws {
         let json = """
         {
@@ -82,17 +159,13 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        measure {
-            for _ in 0..<10_000 {
-                let user = try! newParser.decode(User.self, from: json)
-                
-                XCTAssertEqual(user.id, "0")
-                XCTAssertEqual(user.username, "Joannis")
-                XCTAssertEqual(user.role, "admin")
-                XCTAssertTrue(user.awesome)
-                XCTAssertFalse(user.superAwesome)
-            }
-        }
+        let user = try! newParser.decode(User.self, from: json)
+        
+        XCTAssertEqual(user.id, "0")
+        XCTAssertEqual(user.username, "Joannis")
+        XCTAssertEqual(user.role, "admin")
+        XCTAssertTrue(user.awesome)
+        XCTAssertFalse(user.superAwesome)
     }
     
     func testArray() throws {
@@ -114,21 +187,17 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        measure {
-            for _ in 0..<10_000 {
-                let user = try! newParser.decode(User.self, from: json)
-                
-                XCTAssertEqual(user.id, "0")
-                XCTAssertEqual(user.username, "Joannis")
-                XCTAssertEqual(user.roles.count, 4)
-                XCTAssertEqual(user.roles[0], "admin")
-                XCTAssertEqual(user.roles[1], nil)
-                XCTAssertEqual(user.roles[2], "member")
-                XCTAssertEqual(user.roles[3], "moderator")
-                XCTAssertTrue(user.awesome)
-                XCTAssertFalse(user.superAwesome)
-            }
-        }
+        let user = try! newParser.decode(User.self, from: json)
+        
+        XCTAssertEqual(user.id, "0")
+        XCTAssertEqual(user.username, "Joannis")
+        XCTAssertEqual(user.roles.count, 4)
+        XCTAssertEqual(user.roles[0], "admin")
+        XCTAssertEqual(user.roles[1], nil)
+        XCTAssertEqual(user.roles[2], "member")
+        XCTAssertEqual(user.roles[3], "moderator")
+        XCTAssertTrue(user.awesome)
+        XCTAssertFalse(user.superAwesome)
     }
     
     func testEscaping() throws {
@@ -150,21 +219,17 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        measure {
-            for _ in 0..<10_000 {
-                let user = try! newParser.decode(User.self, from: json)
-                
-                XCTAssertEqual(user.id, "0")
-                XCTAssertEqual(user.username, "Joannis\tis\nawesome/\\\"")
-                XCTAssertEqual(user.roles.count, 4)
-                XCTAssertEqual(user.roles[0], "admin")
-                XCTAssertEqual(user.roles[1], nil)
-                XCTAssertEqual(user.roles[2], "member")
-                XCTAssertEqual(user.roles[3], "moderator")
-                XCTAssertTrue(user.awesome)
-                XCTAssertFalse(user.superAwesome)
-            }
-        }
+        let user = try! newParser.decode(User.self, from: json)
+        
+        XCTAssertEqual(user.id, "0")
+        XCTAssertEqual(user.username, "Joannis\tis\nawesome/\\\"")
+        XCTAssertEqual(user.roles.count, 4)
+        XCTAssertEqual(user.roles[0], "admin")
+        XCTAssertEqual(user.roles[1], nil)
+        XCTAssertEqual(user.roles[2], "member")
+        XCTAssertEqual(user.roles[3], "moderator")
+        XCTAssertTrue(user.awesome)
+        XCTAssertFalse(user.superAwesome)
     }
     
     func testNumerical() throws {
@@ -190,19 +255,15 @@ final class IkigaJSONTests: XCTestCase {
             let imin: Int32
         }
         
-        measure {
-            for _ in 0..<10_000 {
-                let stuff = try! newParser.decode(Stuff.self, from: json)
-                
-                XCTAssertEqual(stuff.piD, 3.14)
-                XCTAssertEqual(stuff.piF, 3.14)
-                XCTAssertEqual(stuff.u8, 255)
-                XCTAssertEqual(stuff.u8zero, 0)
-                XCTAssertEqual(stuff.i8, -127)
-                XCTAssertEqual(stuff.imax, .max)
-                XCTAssertEqual(stuff.imin, .min)
-            }
-        }
+        let stuff = try newParser.decode(Stuff.self, from: json)
+        
+        XCTAssertEqual(stuff.piD, 3.14)
+        XCTAssertEqual(stuff.piF, 3.14)
+        XCTAssertEqual(stuff.u8, 255)
+        XCTAssertEqual(stuff.u8zero, 0)
+        XCTAssertEqual(stuff.i8, -127)
+        XCTAssertEqual(stuff.imax, .max)
+        XCTAssertEqual(stuff.imin, .min)
     }
     
     func testCodablePerformance() throws {
@@ -218,11 +279,7 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        measure {
-            for _ in 0..<10_000 {
-                _ = try! newParser.decode(User.self, from: data)
-            }
-        }
+        _ = try! newParser.decode(User.self, from: data)
     }
     
     static var allTests = [

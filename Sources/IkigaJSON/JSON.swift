@@ -16,6 +16,8 @@ internal struct JSONParser {
     mutating func recycle() {
         description.recycle()
         self.totalOffset = 0
+        self.pointer = nil
+        self.count = nil
     }
     
     internal var description = JSONDescription()
