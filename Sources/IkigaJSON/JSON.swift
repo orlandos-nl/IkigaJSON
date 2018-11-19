@@ -65,29 +65,9 @@ extension JSONParser {
         try assertMoreData()
     }
     
-//    internal static func scanArray(fromPointer pointer: UnsafePointer<UInt8>, count: Int) throws -> JSONArray {
-//        var parser = JSONParser(pointer: pointer, count: count)
-//        
-//        guard case .array(let array) = try parser.scanValue().storage else {
-//            throw JSONError.invalidTopLevelObject
-//        }
-//        
-//        return JSONArray(array: array)
-//    }
-//    
     internal static func scanValue(fromPointer pointer: UnsafePointer<UInt8>, count: Int) throws -> JSONDescription {
         var parser = JSONParser(pointer: pointer, count: count)
         try parser.scanValue()
         return parser.description
     }
-    
-//    internal static func scanObject(fromPointer pointer: UnsafePointer<UInt8>, count: Int) throws -> JSONObject {
-//        var parser = JSONParser(pointer: pointer, count: count)
-//
-//        guard case .object(let object) = try parser.scanValue().storage else {
-//            throw JSONError.invalidTopLevelObject
-//        }
-//
-//        return JSONObject(object: object)
-//    }
 }

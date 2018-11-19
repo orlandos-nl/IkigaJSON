@@ -96,25 +96,43 @@ internal struct Bounds {
         let end = offset &+ length
         var exponentPow10 = 0
         var fullStop = false
+        var hasExponent = false
+        var exponentNegative = false
         var significand: Int = numericCast(pointer[offset] &- 0x30)
         offset = offset &+ 1
         
         loop: while offset < end {
             let byte = pointer[offset]
             if byte < 0x30 || byte > 0x39 {
+                defer {
+                    offset = offset &+ 1
+                }
+                
                 if byte == .fullStop {
                     // Starting exponent
                     fullStop = true
-                    offset = offset &+ 1
                     continue loop
                 } else if byte == .e || byte == .E {
-                    exponentPow10 = exponentPow10 &- 1
+                    hasExponent = true
+                    continue loop
+                } else {
+                    break loop
                 }
-                
-                break loop
             }
             
-            if fullStop {
+            if hasExponent {
+                if !exponentNegative {
+                    if byte == .minus {
+                        exponentNegative = true
+                    } else if byte == .plus {
+                        exponentNegative = false
+                    } else {
+                        exponentPow10 = exponentPow10 &- 1
+                    }
+                } else {
+                    exponentPow10 = exponentPow10 &+ 1
+                }
+            } else if fullStop {
                 exponentPow10 = exponentPow10 &- 1
             }
             
@@ -183,6 +201,7 @@ internal struct Bounds {
     }
 }
 
+// FIXME: Test, probably broken still
 fileprivate func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
     var offset = offset
     
