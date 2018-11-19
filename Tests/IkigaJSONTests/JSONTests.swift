@@ -200,6 +200,76 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertFalse(user.superAwesome)
     }
     
+    @available(OSX 10.12, *)
+    func testISO8601DateStrategy() throws {
+        let decoder = newParser
+        decoder.settings.dateDecodingStrategy = .iso8601
+        
+        let date = Date()
+        let string = ISO8601DateFormatter().string(from: date)
+        
+        let json = """
+        {
+            "createdAt": "\(string)"
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Decodable {
+            let createdAt: Date
+        }
+        
+        let test = try decoder.decode(Test.self, from: json)
+        
+        // Because of Double rounding errors, this is necessary
+        XCTAssertEqual(Int(test.createdAt.timeIntervalSince1970), Int(date.timeIntervalSince1970))
+    }
+    
+    @available(OSX 10.12, *)
+    func testEpochSecDateStrategy() throws {
+        let decoder = newParser
+        decoder.settings.dateDecodingStrategy = .secondsSince1970
+        
+        let date = Date()
+        
+        let json = """
+        {
+            "createdAt": \(Int(date.timeIntervalSince1970))
+        }
+        """.data(using: .utf8)!
+        
+        struct Test: Decodable {
+            let createdAt: Date
+        }
+        
+        let test = try decoder.decode(Test.self, from: json)
+        
+        // Because of Double rounding errors, this is necessary
+        XCTAssertEqual(Int(test.createdAt.timeIntervalSince1970), Int(date.timeIntervalSince1970))
+    }
+    
+    @available(OSX 10.12, *)
+    func testEpochMSDateStrategy() throws {
+        let decoder = newParser
+        decoder.settings.dateDecodingStrategy = .millisecondsSince1970
+        
+        let date = Date()
+        
+        let json = """
+            {
+            "createdAt": \(Int(date.timeIntervalSince1970 * 1000))
+            }
+            """.data(using: .utf8)!
+        
+        struct Test: Decodable {
+            let createdAt: Date
+        }
+        
+        let test = try decoder.decode(Test.self, from: json)
+        
+        // Because of Double rounding errors, this is necessary
+        XCTAssertEqual(Int(test.createdAt.timeIntervalSince1970), Int(date.timeIntervalSince1970))
+    }
+    
     func testEscaping() throws {
         let json = """
         {
