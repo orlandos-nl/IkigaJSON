@@ -2,6 +2,20 @@
 
 IkigaJSON is a really fast JSON parser. It performed ~4x faster in our tests when decoding a type from JSON.
 
+### Adding the dependency
+
+SPM:
+
+```swift
+.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.0.0"),
+```
+
+Cocoapods:
+
+```swift
+pod 'IkigaJSON', '~> 1.0'
+```
+
 ### Usage
 
 ```swift
