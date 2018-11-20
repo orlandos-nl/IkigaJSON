@@ -35,6 +35,20 @@ let user = try decoder.decode(User.self, from: data)
 
 By design you can build on top of any data storage as long as it exposes a pointer API. This way, IkigaJSON doesn't (need to) copy any data from your buffer keeping it lightweight. The entire parser can function with only 1 memory allocation and allows for reusing the Decoder to reuse the memory allocation.
 
+### Support
+
+- All decoding strategies that Foundation supports
+- Unicode
+- Codable
+- Escaping
+- Performance 🚀
+
+TODO:
+
+- Date/Data _encoding_ strategies
+- Raw JSON APIs (non-codable)
+- `\u` escaped unicode characters
+
 ### Media
 
 [Architecture](https://medium.com/@joannis.orlandos/the-road-to-very-fast-json-parsing-in-swift-4a0225c0313c)
