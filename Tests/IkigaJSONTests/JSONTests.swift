@@ -358,6 +358,34 @@ final class IkigaJSONTests: XCTestCase {
         _ = try! newParser.decode(User.self, from: data)
     }
     
+    func testPerf() throws {
+        let encoder = IkigaJSONEncoder()
+        let decoder = IkigaJSONDecoder()
+        
+        struct User: Codable {
+            let id: Int
+            let name: String
+            let age: Double
+            let roles: [String]
+            let awesome: Bool
+        }
+        
+        let joannis = User(id: 0, name: "Joannis", age: 22.5, roles: ["admin", "coder"], awesome: true)
+        
+        for _ in 0..<100_000 {
+            _ = try encoder.encode(joannis)
+        }
+        
+        let user = try encoder.encode(joannis)
+            print(user)
+//        for _ in 0..<100_000 {
+//            _ = try decoder.decode(User.self, from: user)
+//        }
+//
+        let me = try decoder.decode(User.self, from: user)
+        print(me)
+    }
+    
     static var allTests = [
         ("testObject", testObject),
         ("testArray", testArray),

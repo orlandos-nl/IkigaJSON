@@ -18,6 +18,33 @@ final class AutoDeallocatingPointer {
         self.pointer = new
     }
     
+    private func beforeWrite(offset: Int, count: Int) {
+        let needed = (offset &+ count) &- totalSize
+        
+        if needed > 0 {
+            expand(to: offset &+ count, usedCapacity: offset)
+        }
+    }
+    
+    func insert(_ byte: UInt8, at offset: inout Int) {
+        beforeWrite(offset: offset, count: 1)
+        self.pointer.advanced(by: offset).pointee = byte
+        offset = offset &+ 1
+    }
+    
+    func insert(contentsOf storage: AutoDeallocatingPointer, count: Int, at offset: inout Int) {
+        beforeWrite(offset: offset, count: count)
+        self.pointer.advanced(by: offset).assign(from: storage.pointer, count: count)
+        offset = offset &+ count
+    }
+    
+    func insert(contentsOf storage: [UInt8], at offset: inout Int) {
+        let count = storage.count
+        beforeWrite(offset: offset, count: count)
+        self.pointer.advanced(by: offset).assign(from: storage, count: count)
+        offset = offset &+ count
+    }
+    
     deinit {
         pointer.deallocate()
     }

@@ -15,13 +15,43 @@ public struct JSONEncoderSettings {
     // TODO: Support
     
     /// Defines the method used when encode keys
-    public var keyDecodingStrategy = JSONEncoder.KeyEncodingStrategy.useDefaultKeys
+    public var keyEncodingStrategy = JSONEncoder.KeyEncodingStrategy.useDefaultKeys
+    
+    @available(*, renamed: "keyEncodingStrategy")
+    public var keyDecodingStrategy: JSONEncoder.KeyEncodingStrategy {
+        get {
+            return keyEncodingStrategy
+        }
+        set {
+            keyEncodingStrategy = newValue
+        }
+    }
     
     /// The method used to encode Foundation `Date` types
-    public var dateDecodingStrategy = JSONEncoder.DateEncodingStrategy.deferredToDate
+    public var dateEncodingStrategy = JSONEncoder.DateEncodingStrategy.deferredToDate
+    
+    @available(*, renamed: "dateEncodingStrategy")
+    public var dateDecodingStrategy: JSONEncoder.DateEncodingStrategy {
+        get {
+            return dateEncodingStrategy
+        }
+        set {
+            dateEncodingStrategy = newValue
+        }
+    }
+    
+    public var dataEncodingStrategy = JSONEncoder.DataEncodingStrategy.base64
     
     /// The method used to encode Foundation `Data` types
-    public var dataDecodingStrategy = JSONEncoder.DataEncodingStrategy.base64
+    @available(*, renamed: "dataEncodingStrategy")
+    public var dataDecodingStrategy: JSONEncoder.DataEncodingStrategy {
+        get {
+            return dataEncodingStrategy
+        }
+        set {
+            dataEncodingStrategy = newValue
+        }
+    }
 }
 
 /// A JSON Encoder that aims to be largely functionally equivalent to Foundation.JSONEncoder.
@@ -37,7 +67,7 @@ public struct IkigaJSONEncoder {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
         encoder.writeEnd()
-        return encoder.data
+        return Data(bytes: encoder.data.pointer, count: encoder.offset)
     }
 }
 
@@ -47,7 +77,8 @@ fileprivate let boolFalse: [UInt8] = [.f, .a, .l, .s, .e]
 
 fileprivate final class _JSONEncoder: Encoder {
     var codingPath: [CodingKey]
-    var data = Data()
+    let data = AutoDeallocatingPointer(size: 512)
+    private(set) var offset = 0
     var end: UInt8?
     var superEncoder: _JSONEncoder?
     var didWriteValue = false
@@ -56,7 +87,7 @@ fileprivate final class _JSONEncoder: Encoder {
     
     func writeEnd() {
         if let end = end {
-            data.append(end)
+            data.insert(end, at: &offset)
             self.end = nil
         }
     }
@@ -68,7 +99,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
-        data.append(.curlyLeft)
+        data.insert(.curlyLeft, at: &offset)
         end = .curlyRight
         
         let container = KeyedJSONEncodingContainer<Key>(encoder: self)
@@ -76,7 +107,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func unkeyedContainer() -> UnkeyedEncodingContainer {
-        data.append(.squareLeft)
+        data.insert(.squareLeft, at: &offset)
         end = .squareRight
         
         return UnkeyedJSONEncodingContainer(encoder: self)
@@ -87,34 +118,34 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func writeValue(_ string: String) {
-        data.append(.quote)
-        data.append(string, count: string.utf8.count)
-        data.append(.quote)
+        data.insert(.quote, at: &offset)
+        data.insert(contentsOf: [UInt8](string.utf8), at: &offset)
+        data.insert(.quote, at: &offset)
     }
     
     func writeNull() {
-        data.append(contentsOf: null)
+        data.insert(contentsOf: null, at: &offset)
     }
     
     func writeValue(_ value: Bool) {
-        data.append(contentsOf: value ? boolTrue : boolFalse)
+        data.insert(contentsOf: value ? boolTrue : boolFalse, at: &offset)
     }
     
     func writeValue(_ value: Double) {
         // TODO: Optimize
         let number = String(value)
-        data.append(number, count: number.count)
+        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
     }
     
     func writeValue(_ value: Float) {
         // TODO: Optimize
         let number = String(value)
-        data.append(number, count: number.count)
+        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
     }
     
     func writeComma() {
         if didWriteValue {
-            data.append(.comma)
+            data.insert(.comma, at: &offset)
         } else {
             didWriteValue = true
         }
@@ -123,7 +154,7 @@ fileprivate final class _JSONEncoder: Encoder {
     func writeKey(_ key: String) {
         writeComma()
         writeValue(key)
-        data.append(.colon)
+        data.insert(.colon, at: &offset)
     }
     
     func writeNull(forKey key: String) {
@@ -159,16 +190,16 @@ fileprivate final class _JSONEncoder: Encoder {
     func writeValue<F: BinaryInteger>(_ value: F) {
         // TODO: Optimize
         let number = String(value)
-        data.append(number, count: number.count)
+        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
     }
     
     deinit {
         if let end = end {
-            data.append(end)
+            data.insert(end, at: &offset)
         }
         
         if let superEncoder = superEncoder {
-            superEncoder.data.append(self.data)
+            superEncoder.data.insert(contentsOf: self.data, count: self.offset, at: &superEncoder.offset)
         }
     }
 }
