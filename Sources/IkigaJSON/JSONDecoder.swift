@@ -55,7 +55,7 @@ public struct JSONDecoderSettings {
 public final class IkigaJSONDecoder {
     /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
-    private var parser = JSONParser()
+    private var parser: JSONParser!
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
         self.settings = settings
@@ -66,13 +66,16 @@ public final class IkigaJSONDecoder {
     /// This can save a lot of performance.
     public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
         let pointer = buffer.baseAddress!
-        parser.initialize(pointer: pointer, count: buffer.count)
+        if parser == nil {
+            parser = JSONParser(pointer: pointer, count: buffer.count)
+        } else {
+            parser.recycle(pointer: pointer, count: buffer.count)
+        }
         try parser.scanValue()
         let readOnly = parser.description.readOnly
         
         let decoder = _JSONDecoder(description: readOnly, pointer: pointer, settings: settings)
         let type = try D(from: decoder)
-        parser.recycle()
         return type
     }
     
@@ -227,58 +230,15 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decodeNil(forKey key: Key) throws -> Bool {
-        guard let type = type(ofKey: key) else {
+        guard let type = decoder.description.type(ofKey: decoder.string(forKey: key), in: decoder.pointer) else {
             return decoder.settings.decodeMissingKeyAsNil
         }
         
         return type == .null
     }
     
-    func offset(forKey key: Key) -> Int? {
-        // Object index
-        var offset = 17
-        
-        let count = decoder.description.pointer.advanced(by: 1).withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
-        let key = [UInt8](self.decoder.string(forKey: key).utf8)
-        let keySize = key.count
-        
-        for _ in 0..<count {
-            let bounds = decoder.description.pointer.advanced(by: offset &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(offset: numericCast(pointer[0]), length: numericCast(pointer[1]))
-            }
-            
-            // Skip key
-            decoder.description.skip(withOffset: &offset)
-            if bounds.length == keySize, memcmp(key, self.decoder.pointer.advanced(by: bounds.offset), bounds.length) == 0 {
-                return offset
-            }
-            
-            // Skip value
-            decoder.description.skip(withOffset: &offset)
-        }
-        
-        return nil
-    }
-    
-    func type(atOffset offset: Int) -> JSONType? {
-        guard let type = JSONType(rawValue: decoder.description.pointer[offset]) else {
-            assertionFailure("This type mnust be valid and known")
-            return nil
-        }
-        
-        return type
-    }
-    
-    func type(ofKey key: Key) -> JSONType? {
-        guard let offset = self.offset(forKey: key) else {
-            return nil
-        }
-        
-        return type(atOffset: offset)
-    }
-    
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        guard let type = self.type(ofKey: key) else {
+        guard let type = decoder.description.type(ofKey: decoder.string(forKey: key), in: decoder.pointer) else {
             throw JSONError.decodingError(expected: Bool.self, keyPath: codingPath + [key])
         }
         
@@ -294,8 +254,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     
     func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
         guard
-            let offset = self.offset(forKey: key),
-            let type = self.type(atOffset: offset),
+            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
+            let type = decoder.description.type(atOffset: offset),
             type == .integer || type == .floatingNumber
         else {
             return nil
@@ -315,8 +275,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     
     func integerBounds(forKey key: Key) -> Bounds? {
         guard
-            let offset = self.offset(forKey: key),
-            let type = self.type(atOffset: offset),
+            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
+            let type = decoder.description.type(atOffset: offset),
             type == .integer
         else {
             return nil
@@ -334,8 +294,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
         guard
-            let offset = self.offset(forKey: key),
-            let type = self.type(atOffset: offset),
+            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
+            let type = decoder.description.type(atOffset: offset),
             type == .string || type == .stringWithEscaping
         else {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])
@@ -432,7 +392,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T : Decodable {
-        guard let offset = self.offset(forKey: key) else {
+        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
             throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
         
@@ -441,7 +401,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
-        guard let offset = self.offset(forKey: key) else {
+        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
             throw JSONError.missingKeyedContainer
         }
         
@@ -451,7 +411,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
-        guard let offset = self.offset(forKey: key) else {
+        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
             throw JSONError.missingUnkeyedContainer
         }
         

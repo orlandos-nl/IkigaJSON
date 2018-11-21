@@ -1,5 +1,8 @@
 import Foundation
 
+/// A type that automatically deallocated the pointer and can be expanded manually or automatically.
+///
+/// Has a few helpers for writing binary data. Mainly/only used for the JSONDescription.
 final class AutoDeallocatingPointer {
     var pointer: UnsafeMutablePointer<UInt8>
     private(set) var totalSize: Int
@@ -9,6 +12,9 @@ final class AutoDeallocatingPointer {
         totalSize = size
     }
     
+    /// Expands the buffer to it's new absolute size and copies the usedCapacity to the new buffer.
+    ///
+    /// Any data after the userCapacity is lost
     func expand(to count: Int, usedCapacity size: Int) {
         let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
         new.assign(from: pointer, count: size)
@@ -18,26 +24,32 @@ final class AutoDeallocatingPointer {
         self.pointer = new
     }
     
+    /// Expects `offset + count` bytes in this buffer, if this buffer is too small it's expanded
     private func beforeWrite(offset: Int, count: Int) {
         let needed = (offset &+ count) &- totalSize
         
         if needed > 0 {
-            expand(to: offset &+ count, usedCapacity: offset)
+            // A fat fingered number that will usually be efficient
+            let newSize = offset &+ max(count, 4096)
+            expand(to: newSize, usedCapacity: offset)
         }
     }
     
+    /// Inserts the byte into this storage
     func insert(_ byte: UInt8, at offset: inout Int) {
         beforeWrite(offset: offset, count: 1)
         self.pointer.advanced(by: offset).pointee = byte
         offset = offset &+ 1
     }
     
+    /// Inserts the other autdeallocated storage into this storage
     func insert(contentsOf storage: AutoDeallocatingPointer, count: Int, at offset: inout Int) {
         beforeWrite(offset: offset, count: count)
         self.pointer.advanced(by: offset).assign(from: storage.pointer, count: count)
         offset = offset &+ count
     }
     
+    /// Inserts the bytes into this storage
     func insert(contentsOf storage: [UInt8], at offset: inout Int) {
         let count = storage.count
         beforeWrite(offset: offset, count: count)
@@ -46,6 +58,7 @@ final class AutoDeallocatingPointer {
     }
     
     deinit {
+        /// The magic of this class, automatically deallocating thanks to ARC
         pointer.deallocate()
     }
 }
@@ -68,33 +81,42 @@ struct JSONDescription {
     private(set) var totalSize: Int
     private(set) var size = 0
     
+    /// Creates a new JSONDescription reserving 512 bytes by default.
     init(size: Int = 512) {
         self.autoPointer = AutoDeallocatingPointer(size: size)
         self.pointer = autoPointer.pointer
         self.totalSize = autoPointer.totalSize
     }
     
+    /// Resets the used capacity which would enable reusing this description
     mutating func recycle() {
         self.size = 0
     }
     
+    /// Sets the underlying buffer to this count specifically
     mutating func expand(to count: Int) {
         autoPointer.expand(to: count, usedCapacity: size)
         self.pointer = autoPointer.pointer
         self.totalSize = autoPointer.totalSize
     }
     
+    /// A read only description is used for parsing the description
     var readOnly: ReadOnlyJSONDescription {
         return subDescription(offset: 0)
     }
     
+    /// Slices the description into a read only buffer
+    ///
+    /// This is useful for nested data structures
     func subDescription(offset: Int) -> ReadOnlyJSONDescription {
         return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), size: size &- offset, _super: self)
     }
     
     mutating func requireCapacity(_ n: Int) {
         if totalSize &- size < n {
-            expand(to: totalSize &* 4)
+            // A fat fingered number that will usually be efficient
+            let newSize = max(n, totalSize &+ 4096)
+            expand(to: newSize)
         }
     }
     
@@ -223,6 +245,49 @@ struct ReadOnlyJSONDescription {
         }
         
         return false
+    }
+    
+    func offset(forKey key: String, in buffer: UnsafePointer<UInt8>) -> Int? {
+        // Object index
+        var offset = 17
+        
+        let count = pointer.advanced(by: 1).withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
+        let key = [UInt8](key.utf8)
+        let keySize = key.count
+        
+        for _ in 0..<count {
+            let bounds = pointer.advanced(by: offset &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+                return Bounds(offset: numericCast(pointer[0]), length: numericCast(pointer[1]))
+            }
+            
+            // Skip key
+            skip(withOffset: &offset)
+            if bounds.length == keySize, memcmp(key, buffer.advanced(by: bounds.offset), bounds.length) == 0 {
+                return offset
+            }
+            
+            // Skip value
+            skip(withOffset: &offset)
+        }
+        
+        return nil
+    }
+    
+    func type(atOffset offset: Int) -> JSONType? {
+        guard let type = JSONType(rawValue: pointer[offset]) else {
+            assertionFailure("This type mnust be valid and known")
+            return nil
+        }
+        
+        return type
+    }
+    
+    func type(ofKey key: String, in buffer: UnsafePointer<UInt8>) -> JSONType? {
+        guard let offset = self.offset(forKey: key, in: buffer) else {
+            return nil
+        }
+        
+        return self.type(atOffset: offset)
     }
     
     func keys(inPointer buffer: UnsafePointer<UInt8>, unicode: Bool, atOffset offset: Int = 17) -> [String] {

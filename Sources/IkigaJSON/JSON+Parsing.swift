@@ -1,4 +1,7 @@
+/// All parsing logic of the JSON parser
+
 extension JSONParser {
+    /// Scans a JSON object and parses values within it
     internal mutating func scanArray() throws {
         assert(pointer.pointee == .squareLeft, "An array was scanned but the first byte was not `[`")
         
@@ -31,6 +34,7 @@ extension JSONParser {
         throw JSONError.missingData
     }
     
+    /// Scans a JSON object and parses keys and values within it
     internal mutating func scanObject() throws {
         assert(pointer.pointee == .curlyLeft, "An object was scanned but the first byte was not `{`")
         
@@ -71,6 +75,7 @@ extension JSONParser {
         throw JSONError.missingData
     }
     
+    /// Scans _any_ value and writes it to the description
     internal mutating func scanValue() throws {
         guard hasMoreData else {
             throw JSONError.missingData
@@ -123,16 +128,23 @@ extension JSONParser {
         }
     }
     
+    /// Gets the next byte and advances by 1, doesn't boundary check
     fileprivate mutating func nextByte() -> UInt8 {
         let byte = pointer.pointee
         self.advance(1)
         return byte
     }
     
+    /// Scans a number literal, be it double or integer, and writes it to the description
+    ///
+    /// Integers are simpler to parse, so a difference is made in the binary description
+    ///
+    /// We don't copy the number out here, this saves performance in many areas
     fileprivate mutating func scanNumber() throws {
         var length = 1
         var floating = false
         
+        /// We don't parse/copy the integer out yet
         loop: while length < count {
             let byte = pointer[length]
             
@@ -160,12 +172,19 @@ extension JSONParser {
         description.describeNumber(bounds, floatingPoint: floating)
     }
     
+    /// Scans a String literal at the current offset and writes it to the description. Used for values as well as object keys
+    ///
+    /// We don't copy the String out here, this saves performance in many areas
     fileprivate mutating func scanStringLiteral() throws {
         if pointer.pointee != .quote {
             throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedObjectKey)
         }
         
+        // The offset is calculated and written later, updating the offset too much results in performance loss
         var offset = 1
+        
+        // If any excaping character is detected, it will be noted
+        // This reduces the performance cost on parsing most strings, removing a second unneccessary check
         var didEscape = false
         
         defer {
@@ -177,15 +196,18 @@ extension JSONParser {
             
             let byte = pointer[offset]
             
-            // Unescaped quote
+            // If it's a quote, check if it's escaped
             if byte == .quote {
                 var escaped = false
                 var backwardsOffset = offset &- 1
                 
+                // Every escaped character can have another escaped character
                 escapeLoop: while backwardsOffset > 1 {
                     defer { backwardsOffset = backwardsOffset &- 1 }
                     
                     if pointer[backwardsOffset] == .backslash {
+                        // TODO: Is this the fastest way?
+                        // An integer incrementing that `& 1 == 1` is also escaped, likely more solutions
                         escaped = !escaped
                     } else {
                         break escapeLoop
@@ -199,6 +221,7 @@ extension JSONParser {
                     return
                 }
             } else if byte == .backslash {
+                // Strings are parsed front-to-back, so this backslash is meaningless except it helps us detect if it's escaped
                 didEscape = true
             }
         }
