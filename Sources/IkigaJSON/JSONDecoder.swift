@@ -253,66 +253,28 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
-        guard
-            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
-            let type = decoder.description.type(atOffset: offset),
-            type == .integer || type == .floatingNumber
-        else {
-            return nil
-        }
-        
-        let bounds = decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
-        
-        return (bounds, type == .floatingNumber)
+        return decoder.description.floatingBounds(
+            forKey: decoder.string(forKey: key),
+            in: decoder.pointer
+        )
     }
     
     func integerBounds(forKey key: Key) -> Bounds? {
-        guard
-            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
-            let type = decoder.description.type(atOffset: offset),
-            type == .integer
-        else {
-            return nil
-        }
-        
-        return decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
+        return decoder.description.integerBounds(
+            forKey: decoder.string(forKey: key),
+            in: decoder.pointer
+        )
     }
     
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
-        guard
-            let offset = decoder.description.offset(forKey: decoder.string(forKey: key), in: decoder.pointer),
-            let type = decoder.description.type(atOffset: offset),
-            type == .string || type == .stringWithEscaping
-        else {
+        let keyString = decoder.string(forKey: key)
+        guard let (bounds, escaped) = decoder.description.stringBounds(forKey: keyString, in: decoder.pointer) else {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-            }
-        
         guard let string = bounds.makeString(
             from: decoder.pointer,
-            escaping: type == .stringWithEscaping,
+            escaping: escaped,
             unicode: decoder.settings.decodeUnicode
         ) else {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])

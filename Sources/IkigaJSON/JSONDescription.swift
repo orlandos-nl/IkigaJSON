@@ -342,7 +342,55 @@ struct ReadOnlyJSONDescription {
             return 9
         }
     }
+    
+    func bounds(at offset: Int) -> Bounds {
+        return pointer
+            .advanced(by: offset &+ 1)
+            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+                return Bounds(
+                    offset: numericCast(pointer[0]),
+                    length: numericCast(pointer[1])
+                )
+        }
+    }
+    
+    func stringBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+        guard
+            let offset = self.offset(forKey: key, in: pointer),
+            let type = self.type(atOffset: offset),
+            type == .string || type == .stringWithEscaping
+            else {
+                return nil
+        }
+        
+        return (bounds(at: offset), type == .stringWithEscaping)
+    }
+    
+    func integerBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> Bounds? {
+        guard
+            let offset = self.offset(forKey: key, in: pointer),
+            let type = self.type(atOffset: offset),
+            type == .integer
+            else {
+                return nil
+        }
+        
+        return bounds(at: offset)
+    }
+    
+    func floatingBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+        guard
+            let offset = self.offset(forKey: key, in: pointer),
+            let type = self.type(atOffset: offset),
+            type == .integer || type == .floatingNumber
+            else {
+                return nil
+        }
+        
+        return (bounds(at: offset), type == .floatingNumber)
+    }
 }
+
 
 struct _ArrayObjectDescription {
     let count: UInt32
