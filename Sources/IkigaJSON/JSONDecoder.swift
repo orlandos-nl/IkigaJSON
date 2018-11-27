@@ -87,12 +87,30 @@ public final class IkigaJSONDecoder {
             return try decode(type, from: UnsafeBufferPointer(start: pointer, count: count))
         }
     }
+    
+    /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
+    public func decode<D: Decodable>(_ type: D.Type, from bytes: [UInt8]) throws -> D {
+        return try bytes.withUnsafeBufferPointer { buffer in
+            return try decode(type, from: buffer)
+        }
+    }
+    
+    /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
+    public func decode<D: Decodable>(_ type: D.Type, from string: String) throws -> D {
+        // TODO: Optimize with Swift 5
+        guard let data = string.data(using: .utf8) else {
+            throw JSONError.invalidData(string)
+        }
+        
+        return try self.decode(type, from: data)
+    }
 }
 
 fileprivate struct _JSONDecoder: Decoder {
     let description: ReadOnlyJSONDescription
     let pointer: UnsafePointer<UInt8>
     let settings: JSONDecoderSettings
+    var snakeCasing: Bool
     
     var codingPath = [CodingKey]()
     var userInfo: [CodingUserInfoKey : Any] {
@@ -100,28 +118,10 @@ fileprivate struct _JSONDecoder: Decoder {
     }
     
     func string<Key: CodingKey>(forKey key: Key) -> String {
-        switch self.settings.keyDecodingStrategy {
-        case .useDefaultKeys:
-            return key.stringValue
-        case .convertFromSnakeCase:
-            var characters = [UInt8](key.stringValue.utf8)
-            let size = characters.count
-            
-            for i in 0..<size {
-                if characters[i] == .underscore, i &+ 1 < size {
-                    let byte = characters[i &+ 1]
-                    
-                    if byte >= .a && byte <= .z {
-                        characters[i] = byte &- 0x20
-                        characters.remove(at: i &+ 1)
-                    }
-                }
-            }
-            
-            // The string was guaranteed by us to still be valid UTF-8
-            return String(bytes: characters, encoding: .utf8)!
-        case .custom(let builder):
+        if case .custom(let builder) = settings.keyDecodingStrategy {
             return builder(codingPath + [key]).stringValue
+        } else {
+            return key.stringValue
         }
     }
     
@@ -150,6 +150,12 @@ fileprivate struct _JSONDecoder: Decoder {
         self.description = description
         self.pointer = pointer
         self.settings = settings
+        
+        if case .convertFromSnakeCase = settings.keyDecodingStrategy {
+            self.snakeCasing = true
+        } else {
+            self.snakeCasing = false
+        }
     }
     
     func subDecoder(offsetBy offset: Int) -> _JSONDecoder {
@@ -168,7 +174,7 @@ fileprivate struct _JSONDecoder: Decoder {
                 return Date(timeIntervalSince1970: interval) as! D
             case .millisecondsSince1970:
                 let interval = try singleValueContainer().decode(Double.self)
-                return Date(timeIntervalSince1970: interval * 1000) as! D
+                return Date(timeIntervalSince1970: interval / 1000) as! D
             case .iso8601:
                 let string = try singleValueContainer().decode(String.self)
                 
@@ -216,7 +222,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     var allStringKeys: [String] {
         return decoder.description.keys(
             inPointer: decoder.pointer,
-            unicode: decoder.settings.decodeUnicode
+            unicode: decoder.settings.decodeUnicode,
+            convertingSnakeCasing: self.decoder.snakeCasing
         )
     }
     
@@ -225,12 +232,20 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func contains(_ key: Key) -> Bool {
-        let key = decoder.string(forKey: key)
-        return decoder.description.containsKey(key, inPointer: decoder.pointer, unicode: decoder.settings.decodeUnicode)
+        return decoder.description.containsKey(
+            decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            inPointer: decoder.pointer,
+            unicode: decoder.settings.decodeUnicode
+        )
     }
     
     func decodeNil(forKey key: Key) throws -> Bool {
-        guard let type = decoder.description.type(ofKey: decoder.string(forKey: key), in: decoder.pointer) else {
+        guard let type = decoder.description.type(
+            ofKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: decoder.pointer
+        ) else {
             return decoder.settings.decodeMissingKeyAsNil
         }
         
@@ -238,7 +253,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        guard let type = decoder.description.type(ofKey: decoder.string(forKey: key), in: decoder.pointer) else {
+        guard let type = decoder.description.type(
+            ofKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: decoder.pointer
+        ) else {
             throw JSONError.decodingError(expected: Bool.self, keyPath: codingPath + [key])
         }
         
@@ -255,6 +274,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
         return decoder.description.floatingBounds(
             forKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
             in: decoder.pointer
         )
     }
@@ -262,13 +282,17 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     func integerBounds(forKey key: Key) -> Bounds? {
         return decoder.description.integerBounds(
             forKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
             in: decoder.pointer
         )
     }
     
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
-        let keyString = decoder.string(forKey: key)
-        guard let (bounds, escaped) = decoder.description.stringBounds(forKey: keyString, in: decoder.pointer) else {
+        guard let (bounds, escaped) = decoder.description.stringBounds(
+            forKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: decoder.pointer
+        ) else {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])
         }
         
@@ -354,7 +378,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T : Decodable {
-        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
+        guard let offset = self.decoder.description.offset(
+            forKey: self.decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: self.decoder.pointer
+        ) else {
             throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
         
@@ -363,7 +391,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
-        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
+        guard let offset = self.decoder.description.offset(
+            forKey: self.decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: self.decoder.pointer
+        ) else {
             throw JSONError.missingKeyedContainer
         }
         
@@ -373,7 +405,11 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
-        guard let offset = self.decoder.description.offset(forKey: self.decoder.string(forKey: key), in: self.decoder.pointer) else {
+        guard let offset = self.decoder.description.offset(
+            forKey: self.decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: self.decoder.pointer
+        ) else {
             throw JSONError.missingUnkeyedContainer
         }
         
@@ -686,8 +722,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
             from: decoder.pointer,
             escaping: type == .stringWithEscaping,
             unicode: decoder.settings.decodeUnicode
-            ) else {
-                throw JSONError.decodingError(expected: String.self, keyPath: codingPath)
+        ) else {
+            throw JSONError.decodingError(expected: String.self, keyPath: codingPath)
         }
         
         return string

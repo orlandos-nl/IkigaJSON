@@ -223,20 +223,65 @@ struct ReadOnlyJSONDescription {
         return JSONType(rawValue: pointer[0])!
     }
     
-    func containsKey(_ key: String, inPointer buffer: UnsafePointer<UInt8>, unicode: Bool, fromOffset offset: Int = 17) -> Bool {
+    private func convertSnakeCasing(for characters: inout Data) {
+        var size = characters.count
+        var i = 0
+        
+        while i < size {
+            if characters[i] == .underscore, i &+ 1 < size {
+                size = size &- 1
+                let byte = characters[i &+ 1]
+                
+                if byte >= .a && byte <= .z {
+                    characters[i] = byte &- 0x20
+                    characters.remove(at: i &+ 1)
+                }
+            }
+            
+            i = i &+ 1
+        }
+    }
+    
+    private func snakeCasedEqual(key: [UInt8], pointer: UnsafePointer<UInt8>, length: Int) -> Bool {
+        let keySize = key.count
+        var characters = Data(bytes: pointer, count: length)
+        convertSnakeCasing(for: &characters)
+        
+        // The string was guaranteed by us to still be valid UTF-8
+        let byteCount = characters.count
+        if byteCount == keySize {
+            return characters.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
+                return memcmp(key, pointer, keySize) == 0
+            }
+        }
+        
+        return false
+    }
+    
+    func containsKey(
+        _ key: String,
+        convertingSnakeCasing: Bool,
+        inPointer buffer: UnsafePointer<UInt8>,
+        unicode: Bool,
+        fromOffset offset: Int = 17
+    ) -> Bool {
         assert(self.type == .object)
         // type(u8) + count(u32) + offset(u32) + length(u32)
         var offset = offset
         
         let count = self.pointer.advanced(by: 1).withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
-        let keySize = key.utf8.count
+        
+        let key = [UInt8](key.utf8)
+        let keySize = key.count
         
         for _ in 0..<count {
             let bounds = self.pointer.advanced(by: offset &+ 1).withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
                 return Bounds(offset: numericCast(pointer[0]), length: numericCast(pointer[1]))
             }
             
-            if bounds.length == keySize, memcmp(key, buffer.advanced(by: bounds.offset), bounds.length) == 0 {
+            if !convertingSnakeCasing, bounds.length == keySize, memcmp(key, buffer.advanced(by: bounds.offset), bounds.length) == 0 {
+                return true
+            } else if convertingSnakeCasing, snakeCasedEqual(key: key, pointer: buffer + bounds.offset, length: bounds.length) {
                 return true
             }
             
@@ -247,7 +292,11 @@ struct ReadOnlyJSONDescription {
         return false
     }
     
-    func offset(forKey key: String, in buffer: UnsafePointer<UInt8>) -> Int? {
+    func offset(
+        forKey key: String,
+        convertingSnakeCasing: Bool,
+        in buffer: UnsafePointer<UInt8>
+    ) -> Int? {
         // Object index
         var offset = 17
         
@@ -262,7 +311,10 @@ struct ReadOnlyJSONDescription {
             
             // Skip key
             skip(withOffset: &offset)
-            if bounds.length == keySize, memcmp(key, buffer.advanced(by: bounds.offset), bounds.length) == 0 {
+            
+            if !convertingSnakeCasing, bounds.length == keySize, memcmp(key, buffer.advanced(by: bounds.offset), bounds.length) == 0 {
+                return offset
+            } else if convertingSnakeCasing, snakeCasedEqual(key: key, pointer: buffer + bounds.offset, length: bounds.length) {
                 return offset
             }
             
@@ -282,15 +334,24 @@ struct ReadOnlyJSONDescription {
         return type
     }
     
-    func type(ofKey key: String, in buffer: UnsafePointer<UInt8>) -> JSONType? {
-        guard let offset = self.offset(forKey: key, in: buffer) else {
+    func type(
+        ofKey key: String,
+        convertingSnakeCasing: Bool,
+        in buffer: UnsafePointer<UInt8>
+    ) -> JSONType? {
+        guard let offset = self.offset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: buffer) else {
             return nil
         }
         
         return self.type(atOffset: offset)
     }
     
-    func keys(inPointer buffer: UnsafePointer<UInt8>, unicode: Bool, atOffset offset: Int = 17) -> [String] {
+    func keys(
+        inPointer buffer: UnsafePointer<UInt8>,
+        unicode: Bool,
+        convertingSnakeCasing: Bool,
+        atOffset offset: Int = 17
+    ) -> [String] {
         assert(self.type == .object)
         // type(u8) + count(u32) + offset(u32) + length(u32)
         var offset = offset
@@ -305,9 +366,17 @@ struct ReadOnlyJSONDescription {
                 return Bounds(offset: numericCast(pointer[0]), length: numericCast(pointer[1]))
             }
             let escaping = self.pointer[offset] == JSONType.stringWithEscaping.rawValue
-            if let string = bounds.makeString(from: buffer, escaping: escaping, unicode: unicode) {
-                keys.append(string)
+            
+            if var stringData = bounds.makeStringData(from: buffer, escaping: escaping, unicode: unicode) {
+                if convertingSnakeCasing {
+                    convertSnakeCasing(for: &stringData)
+                }
+                
+                if let key = String(data: stringData, encoding: .utf8) {
+                    keys.append(key)
+                }
             }
+            
             skip(withOffset: &offset)
             skip(withOffset: &offset)
         }
@@ -354,9 +423,9 @@ struct ReadOnlyJSONDescription {
         }
     }
     
-    func stringBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+    func stringBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
         guard
-            let offset = self.offset(forKey: key, in: pointer),
+            let offset = self.offset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer),
             let type = self.type(atOffset: offset),
             type == .string || type == .stringWithEscaping
             else {
@@ -366,9 +435,9 @@ struct ReadOnlyJSONDescription {
         return (bounds(at: offset), type == .stringWithEscaping)
     }
     
-    func integerBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> Bounds? {
+    func integerBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> Bounds? {
         guard
-            let offset = self.offset(forKey: key, in: pointer),
+            let offset = self.offset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer),
             let type = self.type(atOffset: offset),
             type == .integer
             else {
@@ -378,9 +447,9 @@ struct ReadOnlyJSONDescription {
         return bounds(at: offset)
     }
     
-    func floatingBounds(forKey key: String, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+    func floatingBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
         guard
-            let offset = self.offset(forKey: key, in: pointer),
+            let offset = self.offset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer),
             let type = self.type(atOffset: offset),
             type == .integer || type == .floatingNumber
             else {

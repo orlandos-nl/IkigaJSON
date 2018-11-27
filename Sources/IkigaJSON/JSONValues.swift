@@ -20,6 +20,14 @@ internal struct Bounds {
     let length: Int
     
     func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
+        if let data = makeStringData(from: pointer, escaping: escaping, unicode: unicode) {
+            return String(data: data, encoding: .utf8)
+        }
+        
+        return nil
+    }
+        
+    func makeStringData(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> Data? {
         var data = Data(bytes: pointer + offset, count: length)
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
@@ -69,7 +77,7 @@ internal struct Bounds {
             }
         }
         
-        return String(data: data, encoding: .utf8)
+        return data
     }
     
     internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double? {

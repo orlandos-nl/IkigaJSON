@@ -88,6 +88,46 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
     }
     
+    func testKeyDecoding() throws {
+        let parser = newParser
+        parser.settings.keyDecodingStrategy = .convertFromSnakeCase
+        
+        struct Test: Codable {
+            let userName: String
+            let eMail: String
+        }
+        
+        let json0 = """
+        {
+            "userName": "Joannis",
+            "e_mail": "joannis@orlandos.nl"
+        }
+        """.data(using: .utf8)!
+        
+        let json1 = """
+        {
+            "user_name": "Joannis",
+            "e_mail": "joannis@orlandos.nl"
+        }
+        """.data(using: .utf8)!
+        
+        do {
+            let user = try parser.decode(Test.self, from: json0)
+            XCTAssertEqual(user.userName, "Joannis")
+            XCTAssertEqual(user.eMail, "joannis@orlandos.nl")
+        } catch {
+            XCTFail()
+        }
+        
+        do {
+            let user = try parser.decode(Test.self, from: json1)
+            XCTAssertEqual(user.userName, "Joannis")
+            XCTAssertEqual(user.eMail, "joannis@orlandos.nl")
+        } catch {
+            XCTFail()
+        }
+    }
+    
     func testEncoding() throws {
         let json = """
         {
