@@ -432,6 +432,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         return decoder.codingPath
     }
     let decoder: _JSONDecoder
+    // Array descriptions are 17 bytes
     var offset = 17
     var currentIndex = 0
     

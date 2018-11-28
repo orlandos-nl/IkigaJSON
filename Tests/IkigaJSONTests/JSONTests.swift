@@ -180,6 +180,101 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(test.flag, "🇳🇱")
     }
     
+    func testJSONObject() throws {
+        let json = """
+        {
+            "id": "0",
+            "username": "Joannis",
+            "role": "admin",
+            "awesome": true,
+            "superAwesome": false
+        }
+        """.data(using: .utf8)!
+        
+        let object = try JSONObject(data: json)
+        XCTAssertEqual(object["id"].string, "0")
+        XCTAssertEqual(object["username"].string, "Joannis")
+        XCTAssertEqual(object["role"].string, "admin")
+        XCTAssertEqual(object["awesome"].bool, true)
+        XCTAssertEqual(object["superAwesome"].bool, false)
+        
+        XCTAssertNil(object["ID"])
+        XCTAssertNil(object["user_name"])
+        XCTAssertNil(object["test"])
+    }
+    
+    func testJSONArray() throws {
+        let json = """
+        [0,1,2,true,"false"]
+        """.data(using: .utf8)!
+        
+        let array = try JSONArray(data: json)
+        XCTAssertEqual(array[0].int, 0)
+        XCTAssertEqual(array[1].int, 1)
+        XCTAssertEqual(array[2].int, 2)
+        XCTAssertEqual(array[3].bool, true)
+        XCTAssertEqual(array[4].string, "false")
+        
+        XCTAssertNil(array[5])
+        XCTAssertNil(array[4].bool)
+    }
+    
+    func testNestedJSONObject() throws {
+        let json = """
+        {
+            "id": "0",
+            "username": "Joannis",
+            "roles": ["admin", "user"],
+            "awesome": true,
+            "details": {
+                "pet": "Noodles"
+            },
+            "superAwesome": false
+        }
+        """.data(using: .utf8)!
+        
+        let object = try JSONObject(data: json)
+        XCTAssertEqual(object["id"].string, "0")
+        XCTAssertEqual(object["username"].string, "Joannis")
+        XCTAssertEqual(object["roles"][0].string, "admin")
+        XCTAssertEqual(object["roles"][1].string, "user")
+        XCTAssertEqual(object["details"]["pet"].string, "Noodles")
+        XCTAssertEqual(object["awesome"].bool, true)
+        XCTAssertEqual(object["superAwesome"].bool, false)
+        
+        XCTAssertNil(object["ID"])
+        XCTAssertNil(object["user_name"])
+        XCTAssertNil(object["test"])
+        XCTAssertNil(object["roles"][2])
+        XCTAssertNil(object["roles"]["admin"])
+        XCTAssertNil(object["roles"]["details"]["hoi"])
+        XCTAssertNil(object["roles"]["details"][5])
+        XCTAssertNil(object["roles"]["details"][0])
+    }
+    
+    func testNestedJSONArray() throws {
+        let json = """
+        [0,1,[1,true,true,"hoi"],{"name":"Klaas"},"false"]
+        """.data(using: .utf8)!
+        
+        let array = try JSONArray(data: json)
+        XCTAssertEqual(array[0].int, 0)
+        XCTAssertEqual(array[1].int, 1)
+        XCTAssertNotNil(array[2].array)
+        XCTAssertEqual(array[2][0].int, 1)
+        XCTAssertEqual(array[2][1].bool, true)
+        XCTAssertEqual(array[2][2].bool, true)
+        XCTAssertEqual(array[2][3].string, "hoi")
+        XCTAssertEqual(array[3]["name"].string, "Klaas")
+        XCTAssertEqual(array[4].string, "false")
+        
+        XCTAssertNil(array[5])
+        XCTAssertNil(array[4].bool)
+        XCTAssertNil(array[2][4])
+        XCTAssertNil(array[3][1])
+        XCTAssertNil(array[3]["henk"])
+    }
+    
     func testObject() throws {
         let json = """
         {

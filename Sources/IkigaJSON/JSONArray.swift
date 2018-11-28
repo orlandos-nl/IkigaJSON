@@ -1,20 +1,20 @@
 import Foundation
 
-public struct JSONObject {
+public struct JSONArray {
     let data: Data
     var reader: ReadOnlyJSONDescription
-
+    
     public init(data: Data) throws {
         self.data = data
-
+        
         let size = data.count
         
         let description = try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
             return try JSONParser.scanValue(fromPointer: pointer, count: size)
         }
         self.reader = description.readOnly
-
-        guard reader.type == .object else {
+        
+        guard reader.type == .array else {
             throw JSONError.expectedObject
         }
     }
@@ -23,18 +23,29 @@ public struct JSONObject {
         self.data = data
         self.reader = description
     }
-
+    
     private func withPointer<T>(_ run: (UnsafePointer<UInt8>) -> T) -> T {
         return data.withUnsafeBytes(run)
     }
-
-    public subscript(key: String) -> JSONValue? {
+    
+    public subscript(index: Int) -> JSONValue? {
         get {
+            if index >= reader.arrayCount() {
+                // No value available
+                return nil
+            } else if index < 0 {
+                fatalError("Negative index requested for JSONArray.")
+            }
+            
             return withPointer { pointer in
-                guard
-                    let offset = reader.offset(forKey: key, convertingSnakeCasing: false, in: pointer),
-                    let type = reader.type(atOffset: offset)
-                else {
+                // Array descriptions are 17 bytes
+                var offset = 17
+                
+                for _ in 0..<index {
+                    reader.skip(withOffset: &offset)
+                }
+                
+                guard let type = reader.type(atOffset: offset) else {
                     return nil
                 }
 
@@ -60,6 +71,7 @@ public struct JSONObject {
                 case .null:
                     return NSNull()
                 }
+                return nil
             }
         }
 //        set {
