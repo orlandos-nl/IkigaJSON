@@ -16,8 +16,8 @@ extension UInt8 {
 }
 
 internal struct Bounds {
-    let offset: Int
-    let length: Int
+    var offset: Int
+    var length: Int
     
     func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
         if let data = makeStringData(from: pointer, escaping: escaping, unicode: unicode) {

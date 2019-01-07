@@ -10,14 +10,14 @@ extension JSONParser {
         let array = description.describeArray(atOffset: totalOffset)
         let offset = totalOffset
         advance(1)
-        var count: UInt32 = 0
+        var count: Int32 = 0
         
         repeat {
             try skipWhitespace()
             
             if pointer.pointee == .squareRight {
                 advance(1)
-                let result = _ArrayObjectDescription(count: count, byteCount: UInt32(totalOffset &- offset))
+                let result = _ArrayObjectDescription(count: count, byteCount: Int32(totalOffset &- offset))
                 return description.complete(array, withResult: result)
             } else if didParseFirstValue, nextByte() != .comma {
                 throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
@@ -43,14 +43,14 @@ extension JSONParser {
         let object = description.describeObject(atOffset: totalOffset)
         let offset = totalOffset
         advance(1)
-        var count: UInt32 = 0
+        var count: Int32 = 0
         
         repeat {
             try skipWhitespace()
             
             if pointer.pointee == .curlyRight {
                 advance(1)
-                let result = _ArrayObjectDescription(count: count, byteCount: UInt32(totalOffset &- offset))
+                let result = _ArrayObjectDescription(count: count, byteCount: Int32(totalOffset &- offset))
                 return description.complete(object, withResult: result)
             } else if didParseFirstValue, nextByte() != .comma {
                 throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
@@ -98,7 +98,7 @@ extension JSONParser {
             }
             
             advance(5)
-            description.describeFalse()
+            description.describeFalse(at: totalOffset)
         case .t: // true
             guard count > 4 else {
                 throw JSONError.missingData
@@ -109,7 +109,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeTrue()
+            description.describeTrue(at: totalOffset)
         case .n: // null
             guard count > 4 else {
                 throw JSONError.missingData
@@ -120,7 +120,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeNull()
+            description.describeNull(at: totalOffset)
         case .zero ... .nine, .minus:// Numerical
             try scanNumber()
         default:

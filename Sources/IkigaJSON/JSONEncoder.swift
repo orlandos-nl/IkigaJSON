@@ -71,9 +71,9 @@ public struct IkigaJSONEncoder {
     }
 }
 
-fileprivate let null: [UInt8] = [.n, .u, .l, .l]
-fileprivate let boolTrue: [UInt8] = [.t, .r, .u, .e]
-fileprivate let boolFalse: [UInt8] = [.f, .a, .l, .s, .e]
+internal let nullBytes: [UInt8] = [.n, .u, .l, .l]
+internal let boolTrue: [UInt8] = [.t, .r, .u, .e]
+internal let boolFalse: [UInt8] = [.f, .a, .l, .s, .e]
 
 fileprivate final class _JSONEncoder: Encoder {
     var codingPath: [CodingKey]
@@ -124,7 +124,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func writeNull() {
-        data.insert(contentsOf: null, at: &offset)
+        data.insert(contentsOf: nullBytes, at: &offset)
     }
     
     func writeValue(_ value: Bool) {
