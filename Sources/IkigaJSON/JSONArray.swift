@@ -3,11 +3,10 @@ import Foundation
 public struct JSONArray {
     let buffer: Buffer
     var slice: UnsafeRawBufferPointer {
-        return UnsafeRawBufferPointer(start: buffer.pointer + offset, count: reader.byteCount)
+        return UnsafeRawBufferPointer(start: buffer.pointer, count: reader.byteCount)
     }
     var description: JSONDescription
-    let offset: Int
-    var reader: ReadOnlyJSONDescription { return description.subDescription(offset: offset) }
+    var reader: ReadOnlyJSONDescription { return description.readOnly }
     
     public init(data: Data) throws {
         self.buffer = Buffer(copying: data)
@@ -18,7 +17,6 @@ public struct JSONArray {
             return try JSONParser.scanValue(fromPointer: pointer, count: size)
         }
         self.description = description
-        self.offset = 0
         
         guard reader.type == .array else {
             throw JSONError.expectedObject
@@ -29,9 +27,8 @@ public struct JSONArray {
         return reader.arrayObjectCount()
     }
     
-    internal init(buffer: Buffer, description: JSONDescription, offset: Int) {
+    internal init(buffer: Buffer, description: JSONDescription) {
         self.buffer = buffer
-        self.offset = offset
         self.description = description
     }
     
@@ -39,7 +36,7 @@ public struct JSONArray {
         _checkBounds(index)
         
         let indexStart = reader.offset(forIndex: index)
-        let bounds = reader.bounds(at: indexStart)
+        let bounds = reader.dataBounds(at: indexStart)
         description.removeArrayDescription(at: indexStart, jsonOffset: bounds.offset, removedJSONLength: bounds.length)
     }
     
@@ -66,22 +63,31 @@ public struct JSONArray {
             let type = reader.type(atOffset: offset)!
 
             switch type {
-            case .object:
-                return JSONObject(buffer: buffer.copy, description: description, offset: self.offset + offset)
-            case .array:
-                return JSONArray(buffer: buffer.copy, description: description, offset: self.offset + offset)
+            case .object, .array:
+                let indexLength = reader.indexLength(atOffset: offset)
+                let jsonBounds = reader.dataBounds(at: offset)
+                
+                var subDescription = description.slice(from: offset, length: indexLength)
+                subDescription.advanceAllJSONOffsets(by: -jsonBounds.offset)
+                let subBuffer = buffer.slice(bounds: jsonBounds)
+                
+                if type == .object {
+                    return JSONObject(buffer: subBuffer, description: subDescription)
+                } else {
+                    return JSONArray(buffer: subBuffer, description: subDescription)
+                }
             case .boolTrue:
                 return true
             case .boolFalse:
                 return false
             case .string:
-                return reader.bounds(at: offset).makeString(from: pointer, escaping: false, unicode: true)!
+                return reader.dataBounds(at: offset).makeString(from: pointer, escaping: false, unicode: true)!
             case .stringWithEscaping:
-                return reader.bounds(at: offset).makeString(from: pointer, escaping: true, unicode: true)!
+                return reader.dataBounds(at: offset).makeString(from: pointer, escaping: true, unicode: true)!
             case .integer:
-                return reader.bounds(at: offset).makeInt(from: pointer)!
+                return reader.dataBounds(at: offset).makeInt(from: pointer)!
             case .floatingNumber:
-                return reader.bounds(at: offset).makeDouble(from: pointer, floating: true)!
+                return reader.dataBounds(at: offset).makeDouble(from: pointer, floating: true)!
             case .null:
                 return NSNull()
             }

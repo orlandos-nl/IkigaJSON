@@ -3,11 +3,18 @@ import Foundation
 public struct JSONObject: ExpressibleByDictionaryLiteral {
     let buffer: Buffer
     var slice: UnsafeRawBufferPointer {
-        return UnsafeRawBufferPointer(start: buffer.pointer + offset, count: reader.byteCount)
+        return UnsafeRawBufferPointer(start: buffer.pointer, count: buffer.used)
     }
     var description: JSONDescription
-    let offset: Int
-    var reader: ReadOnlyJSONDescription { return description.subDescription(offset: offset) }
+    var reader: ReadOnlyJSONDescription { return description.readOnly }
+    
+    public var data: Data {
+        return Data(bytes: buffer.pointer, count: buffer.used)
+    }
+    
+    public var string: String! {
+        return String(data: data, encoding: .utf8)
+    }
 
     public init(data: Data) throws {
         self.buffer = Buffer(copying: data)
@@ -18,7 +25,6 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
             return try JSONParser.scanValue(fromPointer: pointer, count: size)
         }
         self.description = description
-        self.offset = 0
 
         guard reader.type == .object else {
             throw JSONError.expectedObject
@@ -32,7 +38,6 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         writePointer[0] = .curlyLeft
         writePointer[1] = .curlyRight
         self.buffer.used = 2
-        self.offset = 0
         self.description = JSONDescription()
         
         let partialObject = description.describeObject(atOffset: 0)
@@ -44,9 +49,8 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         }
     }
     
-    internal init(buffer: Buffer, description: JSONDescription, offset: Int) {
+    internal init(buffer: Buffer, description: JSONDescription) {
         self.buffer = buffer
-        self.offset = offset
         self.description = description
     }
 
@@ -61,22 +65,31 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
             }
 
             switch type {
-            case .object:
-                return JSONObject(buffer: buffer.copy, description: description, offset: self.offset + offset)
-            case .array:
-                return JSONArray(buffer: buffer.copy, description: description, offset: self.offset + offset)
+            case .object, .array:
+                let indexLength = reader.indexLength(atOffset: offset)
+                let jsonBounds = reader.dataBounds(at: offset)
+                
+                var subDescription = description.slice(from: offset, length: indexLength)
+                subDescription.advanceAllJSONOffsets(by: -jsonBounds.offset)
+                let subBuffer = buffer.slice(bounds: jsonBounds)
+                
+                if type == .object {
+                    return JSONObject(buffer: subBuffer, description: subDescription)
+                } else {
+                    return JSONArray(buffer: subBuffer, description: subDescription)
+                }
             case .boolTrue:
                 return true
             case .boolFalse:
                 return false
             case .string:
-                return reader.bounds(at: offset).makeString(from: pointer, escaping: false, unicode: true)
+                return reader.dataBounds(at: offset).makeString(from: pointer, escaping: false, unicode: true)
             case .stringWithEscaping:
-                return reader.bounds(at: offset).makeString(from: pointer, escaping: true, unicode: true)
+                return reader.dataBounds(at: offset).makeString(from: pointer, escaping: true, unicode: true)
             case .integer:
-                return reader.bounds(at: offset).makeInt(from: pointer)
+                return reader.dataBounds(at: offset).makeInt(from: pointer)
             case .floatingNumber:
-                return reader.bounds(at: offset).makeDouble(from: pointer, floating: true)
+                return reader.dataBounds(at: offset).makeDouble(from: pointer, floating: true)
             case .null:
                 return NSNull()
             }
@@ -89,27 +102,33 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
                     reader.skip(withOffset: &valueOffset)
                     // rewrite value
                     description.rewrite(buffer: buffer, to: newValue, at: valueOffset)
+                    if let string = self["profile"]["username"] as? String, string  != "Henk" && string != "Joannis" {
+                        print("WTF")
+                    }
                 } else {
                     let firstElement = index == 0
                     let hasComma = reader.arrayObjectCount() > 1
                     
-                    var valueBounds = reader.bounds(at: offset)
+                    let keyBounds = reader.jsonBounds(at: offset)
+                    var valueOffset = offset
+                    reader.skip(withOffset: &valueOffset)
+                    let valueBounds = reader.jsonBounds(at: valueOffset)
                     
-                    // -1 offset for the key's leading `"`
-                    valueBounds.offset = valueBounds.offset &- 1
+                    let end = valueBounds.offset &+ valueBounds.length
+                    var bounds = Bounds(offset: keyBounds.offset, length: end &- keyBounds.offset)
                     
                     commaFinder: if hasComma {
                         let pointer = buffer.pointer.bindMemory(to: UInt8.self, capacity: buffer.size)
                         
                         if firstElement {
-                            var valueEnd = valueBounds.offset &+ valueBounds.length
+                            var valueEnd = bounds.offset &+ bounds.length
                             
                             for _ in valueEnd ..< buffer.size {
                                 if pointer[valueEnd] == .comma {
                                     // Comma included in the length
                                     valueEnd = valueEnd &+ 1
                                     
-                                    valueBounds.length = valueEnd &- valueBounds.offset
+                                    bounds.length = valueEnd &- valueBounds.offset
                                     break commaFinder
                                 }
                                 
@@ -119,8 +138,8 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
                             fatalError("No comma found between elements, invalid JSON parsed/created")
                         } else {
                             while valueBounds.offset > 0 {
-                                valueBounds.offset = valueBounds.offset &- 1
-                                valueBounds.length = valueBounds.length &+ 1
+                                bounds.offset = bounds.offset &- 1
+                                bounds.length = bounds.length &+ 1
                                 
                                 if pointer[valueBounds.offset] == .comma {
                                     break commaFinder
@@ -131,136 +150,171 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
                         }
                     }
                     
-                    buffer.prepareRewrite(offset: valueBounds.offset, oldSize: valueBounds.length, newSize: 0)
-                    buffer.used = buffer.used &- valueBounds.length
                     
-                    description.removeObjectDescription(at: offset, jsonOffset: valueBounds.offset, removedJSONLength: valueBounds.length)
+                    buffer.prepareRewrite(offset: bounds.offset, oldSize: bounds.length, newSize: 0)
+                    
+                    description.removeObjectDescription(at: offset, jsonOffset: keyBounds.offset, removedJSONLength: bounds.length)
                 }
             } else if let newValue = newValue {
                 let reader = description.readOnly
                 
-                let insertOffset = reader.bounds(at: 0).length - 1
-                var insertPointer: UnsafeMutableRawPointer
+                let insertOffset = reader.dataBounds(at: 0).length - 1
                 
-                var keyBytes = [UInt8]()
-                let escapedKey = key.escapingAppend(to: &keyBytes)
-                let keyLength = keyBytes.count
-                
-                let (valueBytes, type) = newValue.makeWritable()
-                
-                // 3 = `"` x2 and `:` x1
-                var extra = keyLength + 3 + valueBytes.count
-                let keyBounds: Bounds
-                
-                if reader.arrayObjectCount() > 0 {
-                    // This is safe since we override `}`
-                    extra += 1
-                    buffer.expandBuffer(to: buffer.used + extra)
-                    // 2 + for the `,"` start
-                    keyBounds = Bounds(offset: 2 &+ insertOffset, length: keyLength)
-                    // Make the pointer after possible reallocation reinitialized the pointer
-                    insertPointer = buffer.pointer + insertOffset
-                    insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .comma
+                func writeKey(valueSize: Int) -> (UnsafeMutableRawPointer, Int) {
+                    var insertPointer: UnsafeMutableRawPointer
+                    
+                    var keyBytes = [UInt8]()
+                    let escapedKey = key.escapingAppend(to: &keyBytes)
+                    
+                    // 3 = `"` x2 and `:` x1
+                    var extra = keyBytes.count + 3 + valueSize
+                    
+                    let keyBounds: Bounds
+                    
+                    if reader.arrayObjectCount() > 0 {
+                        // This is safe since we override `}`
+                        extra += 1
+                        buffer.expandBuffer(to: buffer.used + extra)
+                        // 2 + for the `,"` start
+                        keyBounds = Bounds(offset: 2 &+ insertOffset, length: keyBytes.count)
+                        // Make the pointer after possible reallocation reinitialized the pointer
+                        insertPointer = buffer.pointer + insertOffset
+                        insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .comma
+                        insertPointer += 1
+                    } else {
+                        buffer.expandBuffer(to: buffer.used + extra)
+                        // 1 + for the `"` start
+                        keyBounds = Bounds(offset: 1 &+ insertOffset, length: keyBytes.count)
+                        // Make the pointer after possible reallocation reinitialized the pointer
+                        insertPointer = buffer.pointer + insertOffset
+                    }
+                    
+                    insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .quote
                     insertPointer += 1
-                } else {
-                    buffer.expandBuffer(to: buffer.used + extra)
-                    // 1 + for the `"` start
-                    keyBounds = Bounds(offset: 1 &+ insertOffset, length: keyLength)
-                    // Make the pointer after possible reallocation reinitialized the pointer
-                    insertPointer = buffer.pointer + insertOffset
+                    
+                    assert(buffer.pointer.distance(to: insertPointer) + keyBytes.count <= buffer.size)
+                    memcpy(insertPointer, keyBytes, keyBytes.count)
+                    description.describeString(keyBounds, escaped: escapedKey)
+                    
+                    insertPointer += keyBytes.count
+                    
+                    insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .quote
+                    insertPointer += 1
+                    insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .colon
+                    insertPointer += 1
+                    
+                    let jsonValueOffset = insertOffset &+ extra &- valueSize
+                    assert(jsonValueOffset == buffer.pointer.distance(to: insertPointer))
+                    return (insertPointer, jsonValueOffset)
                 }
                 
-                insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .quote
-                insertPointer += 1
+                let indexOffset = description.used
                 
-                memcpy(insertPointer, keyBytes, keyLength)
-                description.describeString(keyBounds, escaped: escapedKey)
+                func write(_ string: String) -> Bounds {
+                    let (pointer, jsonOffset) = writeKey(valueSize: 4)
+                    
+                    let string = [UInt8](string.utf8)
+                    memcpy(pointer, string, string.count)
+                    pointer.advanced(by: string.count).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                    buffer.used = jsonOffset &+ string.count &+ 3 // + 1 for the `}` and 2x `"`
+                    return Bounds(offset: jsonOffset, length: string.count)
+                }
                 
-                insertPointer += keyLength
-
-                insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .quote
-                insertPointer += 1
-                insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .colon
-                insertPointer += 1
+                let oldSize = buffer.size
+                defer {
+                    let newSize = buffer.size
+                    let addedJSON = newSize &- oldSize
+                    description.incrementObjectCount(jsonSize: addedJSON, atValueOffset: indexOffset)
+                }
                 
-                memcpy(insertPointer, valueBytes, valueBytes.count)
-                var valueBounds = Bounds(offset: insertOffset &+ extra &- valueBytes.count, length: valueBytes.count)
-                let indexOffset = description.size
-                
-                switch type {
-                case .object:
-                    fatalError()
-                case .array:
-                    fatalError()
-                case .boolTrue:
-                    description.describeTrue(at: valueBounds.offset)
-                case .boolFalse:
-                    description.describeFalse(at: valueBounds.offset)
-                case .string, .stringWithEscaping:
+                switch newValue {
+                case let object as JSONObject:
+                    let valueSize = object.buffer.used
+                    let (pointer, jsonOffset) = writeKey(valueSize: valueSize)
+                    self.description.addNestedDescription(object.description, at: jsonOffset)
+                    
+                    assert(buffer.pointer.distance(to: pointer) + valueSize <= buffer.size)
+                    memcpy(pointer, object.buffer.pointer, valueSize)
+                    pointer.advanced(by: valueSize).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                    buffer.used = jsonOffset &+ valueSize &+ 1 // + 1 for the `}`
+                    
+//                    valueBounds = Bounds(offset: jsonOffset, length: valueBytes.count)
+//                    fatalError()
+//                case .array:
+//                    valueBounds = Bounds(offset: jsonOffset, length: valueBytes.count)
+//                    fatalError()
+                case let bool as Bool:
+                    if bool {
+                        let (pointer, jsonOffset) = writeKey(valueSize: 4)
+                        let valueBounds = Bounds(offset: jsonOffset, length: 4)
+                        description.describeTrue(at: valueBounds.offset)
+                        memcpy(pointer, boolTrue, 4)
+                        pointer.advanced(by: 4).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                        buffer.used = jsonOffset &+ 4 &+ 1 // + 1 for the `}`
+                    } else {
+                        let (pointer, jsonOffset) = writeKey(valueSize: 5)
+                        let valueBounds = Bounds(offset: jsonOffset, length: 5)
+                        description.describeFalse(at: valueBounds.offset)
+                        memcpy(pointer, boolFalse, 5)
+                        pointer.advanced(by: 5).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                        buffer.used = jsonOffset &+ 5 &+ 1 // + 1 for the `}`
+                    }
+                case let string as String:
+                    var valueBytes = [UInt8]()
+                    valueBytes.append(.quote)
+                    let escaped = string.escapingAppend(to: &valueBytes)
+                    valueBytes.append(.quote)
+                    
+                    let (pointer, jsonOffset) = writeKey(valueSize: valueBytes.count)
+                    memcpy(pointer, valueBytes, valueBytes.count)
+                    
                     // Strings are compared and bounds start after the starting `"` and stop before the ending `"`
-                    valueBounds.offset += 1
-                    description.describeString(valueBounds, escaped: type == .stringWithEscaping)
-                case .integer, .floatingNumber:
-                    description.describeNumber(valueBounds, floatingPoint: type == .floatingNumber)
-                case .null:
+                    // Therefore it's offset by 1 `"`
+                    let valueBounds = Bounds(offset: jsonOffset &+ 1, length: valueBytes.count &- 2)
+                    buffer.used = jsonOffset &+ valueBytes.count &+ 1 // + 1 for the `}`
+                    description.describeString(valueBounds, escaped: escaped)
+                    pointer.advanced(by: valueBytes.count).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                case let double as Double:
+                    let valueBounds = write(String(double))
+                    description.describeNumber(valueBounds, floatingPoint: true)
+                case let int as Int8:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as Int16:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as Int32:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as Int64:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as UInt:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as UInt8:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as UInt16:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as UInt32:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case let int as UInt64:
+                    let valueBounds = write(String(int))
+                    description.describeNumber(valueBounds, floatingPoint: false)
+                case is NSNull:
+                    let (pointer, jsonOffset) = writeKey(valueSize: 4)
+                    let valueBounds = Bounds(offset: jsonOffset, length: 4)
                     description.describeNull(at: valueBounds.offset)
+                    memcpy(pointer, nullBytes, 5)
+                    pointer.advanced(by: 5).assumingMemoryBound(to: UInt8.self).pointee = .curlyRight
+                    buffer.used = jsonOffset &+ 5
+                default:
+                    fatalError("Unsupported value \(newValue)")
                 }
-                
-                insertPointer += valueBytes.count
-                
-                 // 3 = `"` x2 and `:` x1
-                insertPointer.bindMemory(to: UInt8.self, capacity: 1).pointee = .curlyRight
-                
-                buffer.used += extra
-                
-                description.incrementObjectCount(jsonSize: extra, atValueOffset: indexOffset)
             }
-        }
-    }
-}
-
-extension JSONValue {
-    func makeWritable() -> ([UInt8], JSONType) {
-        switch self {
-        case let string as String:
-            var valueBytes = [UInt8]()
-            valueBytes.append(.quote)
-            let escaped = string.escapingAppend(to: &valueBytes)
-            valueBytes.append(.quote)
-            let type: JSONType = escaped ? .stringWithEscaping : .string
-            return (valueBytes, type)
-        case is NSNull:
-            return (nullBytes, .null)
-        case let bool as Bool:
-            return bool ? (boolTrue, .boolTrue) : (boolFalse, .boolFalse)
-        case let double as Double:
-            return (Array(String(double).utf8), .floatingNumber)
-        case let int as Int:
-            return (Array(String(int).utf8), .integer)
-        case let int as Int8:
-            return (Array(String(int).utf8), .integer)
-        case let int as Int16:
-            return (Array(String(int).utf8), .integer)
-        case let int as Int32:
-            return (Array(String(int).utf8), .integer)
-        case let int as Int64:
-            return (Array(String(int).utf8), .integer)
-        case let int as UInt:
-            return (Array(String(int).utf8), .integer)
-        case let int as UInt8:
-            return (Array(String(int).utf8), .integer)
-        case let int as UInt16:
-            return (Array(String(int).utf8), .integer)
-        case let int as Int32:
-            return (Array(String(int).utf8), .integer)
-        case let int as UInt64:
-            return (Array(String(int).utf8), .integer)
-        case let object as JSONObject:
-            return (, .object)
-        case let array as JSONArray:
-            fatalError()
-        default:
-            fatalError("Unsupported value \(self) for JSON")
         }
     }
 }

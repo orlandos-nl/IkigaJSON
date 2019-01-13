@@ -66,11 +66,24 @@ internal final class Buffer {
         
         if diff == 0 { return }
         
+        if used + diff > used {
+            expandBuffer(to: used + diff)
+        }
+        
         let endIndex = offset + oldSize
         let source = pointer + endIndex
         let destination = source + diff
         
-        memmove(destination, source, size - endIndex)
+        memmove(destination, source, used - endIndex)
+        used = used &+ diff
+    }
+    
+    func slice(bounds: Bounds) -> Buffer {
+        let buffer = Buffer(allocating: bounds.length)
+        let source = self.pointer.assumingMemoryBound(to: UInt8.self) + bounds.offset
+        buffer.initialize(atOffset: 0, from: source, length: bounds.length)
+        buffer.used = bounds.length
+        return buffer
     }
     
     deinit { pointer.deallocate() }

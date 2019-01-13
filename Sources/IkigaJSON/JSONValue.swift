@@ -81,11 +81,27 @@ extension JSONValue {
     }
     
     public subscript(key: String) -> JSONValue? {
-        return self.object?[key]
+        get {
+            return self.object?[key]
+        }
+        set {
+            if var object = self as? JSONObject {
+                object[key] = newValue
+                self = object as! Self
+            }
+        }
     }
     
-    public subscript(index: Int) -> JSONValue? {
-        return self.array?[index]
+    public subscript(index: Int) -> JSONValue {
+        get {
+            return (self as! JSONArray)[index]
+        }
+        set {
+            if var array = self as? JSONArray {
+                array[index] = newValue
+                self = array as! Self
+            }
+        }
     }
 }
 
@@ -119,10 +135,14 @@ extension Optional where Wrapped == JSONValue {
     }
     
     public subscript(key: String) -> JSONValue? {
-        return self.object?[key]
+        get {
+            return self.object?[key]
+        }
     }
     
     public subscript(index: Int) -> JSONValue? {
-        return self.array?[index]
+        get {
+            return self.array?[index]
+        }
     }
 }

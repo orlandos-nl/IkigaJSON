@@ -490,7 +490,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         
         let bounds = decoder.description.pointer
             .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
                 return Bounds(
                     offset: numericCast(pointer[0]),
                     length: numericCast(pointer[1])
@@ -511,7 +511,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         
         let bounds = decoder.description.pointer
             .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
                 return Bounds(
                     offset: numericCast(pointer[0]),
                     length: numericCast(pointer[1])
@@ -532,7 +532,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         
         let bounds = decoder.description.pointer
             .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
                 return Bounds(
                     offset: numericCast(pointer[0]),
                     length: numericCast(pointer[1])
@@ -799,7 +799,7 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         let bounds = decoder.description.pointer
             .advanced(by: 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
+            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
                 return Bounds(
                     offset: numericCast(pointer[0]),
                     length: numericCast(pointer[1])

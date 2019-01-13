@@ -77,27 +77,38 @@ final class AutoDeallocatingPointer {
 /// Objects have 2 JSONElements per registered element. The first element must be a string for the key
 struct JSONDescription {
     private let autoPointer: AutoDeallocatingPointer
-    private(set) var pointer: UnsafeMutablePointer<UInt8>
-    private(set) var totalSize: Int
-    private(set) var size = 0
+    private var pointer: UnsafeMutablePointer<UInt8> {
+        return autoPointer.pointer
+    }
+    private var size: Int {
+        return autoPointer.totalSize
+    }
+    private(set) var used = 0
+    
+    func copy() -> JSONDescription {
+        return slice(from: 0, length: used)
+    }
+    
+    func slice(from index: Int, length: Int) -> JSONDescription {
+        var description = JSONDescription(size: length)
+        description.pointer.assign(from: self.pointer + index, count: length)
+        description.used = length
+        return description
+    }
     
     /// Creates a new JSONDescription reserving 512 bytes by default.
     init(size: Int = 512) {
         self.autoPointer = AutoDeallocatingPointer(size: size)
-        self.pointer = autoPointer.pointer
-        self.totalSize = autoPointer.totalSize
     }
     
     /// Resets the used capacity which would enable reusing this description
     mutating func recycle() {
-        self.size = 0
+        self.used = 0
     }
     
     /// Sets the underlying buffer to this count specifically
     mutating func expand(to count: Int) {
-        autoPointer.expand(to: count, usedCapacity: size)
-        self.pointer = autoPointer.pointer
-        self.totalSize = autoPointer.totalSize
+        autoPointer.expand(to: count, usedCapacity: used)
     }
     
     /// A read only description is used for parsing the description
@@ -109,20 +120,55 @@ struct JSONDescription {
     ///
     /// This is useful for nested data structures
     func subDescription(offset: Int) -> ReadOnlyJSONDescription {
-        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), size: size &- offset, _super: self)
+        return ReadOnlyJSONDescription(pointer: pointer.advanced(by: offset), size: used &- offset, _super: self)
+    }
+    
+    mutating func addNestedDescription(_ description: JSONDescription, at jsonOffset: Int) {
+        var description = description.copy()
+        requireCapacity(used &+ description.used)
+        description.advanceAllJSONOffsets(by: jsonOffset)
+        assert(used &+ description.used <= self.size)
+        memcpy(pointer + used, description.pointer, description.used)
+        self.used += description.used
+    }
+    
+    mutating func advanceAllJSONOffsets(by jsonOffset: Int) {
+        var indexOffset = 17
+        let jsonOffset = Int32(jsonOffset)
+        let reader = readOnly
+        
+        pointer.advanced(by: 5).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+            pointer.pointee += jsonOffset
+        }
+        
+        while indexOffset < used {
+            guard let type = reader.type(atOffset: indexOffset) else { return }
+            
+            switch type {
+            case .object, .array:
+                pointer.advanced(by: indexOffset &+ 5).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+                    pointer.pointee += jsonOffset
+                }
+            case .boolTrue, .boolFalse, .null, .string, .stringWithEscaping, .integer,  .floatingNumber:
+                pointer.advanced(by: indexOffset &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+                    pointer.pointee += jsonOffset
+                }
+            }
+            
+            reader.skip(withOffset: &indexOffset)
+        }
     }
     
     mutating func requireCapacity(_ n: Int) {
-        if totalSize &- size < n {
+        if size &- used < n {
             // A fat fingered number that will usually be efficient
-            let newSize = max(n, totalSize &+ 4096)
+            let newSize = max(n, size &+ 4096)
             expand(to: newSize)
         }
     }
     
     mutating func removeObjectDescription(at offset: Int, jsonOffset: Int, removedJSONLength: Int) {
         let reader = self.readOnly
-        
         assert(reader.type == .object)
         
         var removeOffset = offset
@@ -134,10 +180,12 @@ struct JSONDescription {
         
         let destination = pointer + offset
         let source = destination + indexLength
-        let moveCount = size - offset - indexLength
+        let moveCount = used - offset - indexLength
         
+        assert(offset + moveCount <= size && offset >= 0)
+        assert(indexLength + moveCount <= size && indexLength + moveCount >= 0)
         memmove(destination, source, moveCount)
-        size -= indexLength
+        used -= indexLength
         
         (pointer + 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
             pointer[0] -= 1 // count -= 1
@@ -147,7 +195,7 @@ struct JSONDescription {
         var updateLocationOffset = offset
         // Move back offsets >= the removed offset
         for _ in 0..<reader.arrayObjectCount() {
-            let successivePair = reader.bounds(at: offset).offset >= jsonOffset
+            let successivePair = reader.dataBounds(at: offset).offset >= jsonOffset
             
             // Key
             if successivePair {
@@ -177,10 +225,11 @@ struct JSONDescription {
         let indexLength = reader.indexLength(atOffset: offset)
         let destination = pointer + offset
         let source = destination + indexLength
-        let moveCount = size - offset - indexLength
+        let moveCount = used - offset - indexLength
         
+        assert(pointer.distance(to: destination) + moveCount <= used)
         memmove(destination, source, moveCount)
-        size -= indexLength
+        used -= indexLength
         
         (pointer + 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
             pointer[0] -= 1 // count -= 1
@@ -190,7 +239,7 @@ struct JSONDescription {
         var updateLocationOffset = offset
         // Move back offsets >= the removed offset
         for _ in 0..<reader.arrayObjectCount() {
-            let successivePair = reader.bounds(at: offset).offset >= jsonOffset
+            let successivePair = reader.dataBounds(at: offset).offset >= jsonOffset
             
             // Value
             if successivePair {
@@ -202,12 +251,12 @@ struct JSONDescription {
     
     mutating func describeNumber(_ number: Bounds, floatingPoint: Bool) {
         requireCapacity(9)
-        pointer[size] = floatingPoint ? JSONType.floatingNumber.rawValue : JSONType.integer.rawValue
-        pointer.advanced(by: size &+ 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
+        pointer[used] = floatingPoint ? JSONType.floatingNumber.rawValue : JSONType.integer.rawValue
+        pointer.advanced(by: used &+ 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
             pointer[0] = Int32(number.offset)
             pointer[1] = Int32(number.length)
         }
-        size = size &+ 9
+        used = used &+ 9
     }
     
     mutating func incrementObjectCount(jsonSize: Int, atValueOffset offset: Int) {
@@ -233,10 +282,14 @@ struct JSONDescription {
     }
     
     mutating func rewrite(buffer: Buffer, to value: JSONValue, at offset: Int) {
-        let jsonBounds = readOnly.bounds(at: offset)
+        let jsonBounds = readOnly.jsonBounds(at: offset)
         
         var bytes = [UInt8]()
         let length: Int
+        
+        defer {
+            addJSONSize(of: length - jsonBounds.length)
+        }
         
         switch value {
         case let string as String:
@@ -265,59 +318,66 @@ struct JSONDescription {
             if bool {
                 bytes = boolTrue
                 length = 4
-                rewriteTrue(at: offset)
+                rewriteTrue(at: offset, jsonOffset: jsonBounds.offset)
             } else {
                 bytes = boolFalse
                 length = 5
-                rewriteFalse(at: offset)
+                rewriteFalse(at: offset, jsonOffset: jsonBounds.offset)
             }
         case let object as JSONObject:
-            length = object.reader.byteCount
+            length = object.buffer.used
+            let readPointer = object.buffer.pointer.assumingMemoryBound(to: UInt8.self)
             buffer.prepareRewrite(offset: jsonBounds.offset, oldSize: jsonBounds.length, newSize: length)
-            
-            let slice = object.slice
-            let pointer = slice.baseAddress!.bindMemory(to: UInt8.self, capacity: slice.count)
-            buffer.initialize(atOffset: jsonBounds.offset, from: pointer, length: slice.count)
-            
-            rewriteObjectArray(locallyAt: offset, from: object.description, at: object.offset)
+            buffer.initialize(atOffset: jsonBounds.offset, from: readPointer, length: length)
+            var newDescription = object.description.copy()
+            newDescription.advanceAllJSONOffsets(by: jsonBounds.offset)
+            rewriteObjectArray(locallyAt: offset, from: newDescription)
             return
         case let array as JSONArray:
-            length = array.reader.byteCount
+            length = array.buffer.used
+            let readPointer = array.buffer.pointer.assumingMemoryBound(to: UInt8.self)
             buffer.prepareRewrite(offset: jsonBounds.offset, oldSize: jsonBounds.length, newSize: length)
-            
-            let slice = array.slice
-            let pointer = slice.baseAddress!.bindMemory(to: UInt8.self, capacity: slice.count)
-            buffer.initialize(atOffset: jsonBounds.offset, from: pointer, length: slice.count)
-            
-            rewriteObjectArray(locallyAt: offset, from: array.description, at: array.offset)
+            buffer.initialize(atOffset: jsonBounds.offset, from: readPointer, length: length)
+            var newDescription = array.description.copy()
+            newDescription.advanceAllJSONOffsets(by: jsonBounds.offset)
+            rewriteObjectArray(locallyAt: offset, from: newDescription)
             return
         default:
             bytes = nullBytes
             length = 4
-            rewriteNull(at: offset)
+            rewriteNull(at: offset, jsonOffset: jsonBounds.offset)
         }
         
         buffer.prepareRewrite(offset: jsonBounds.offset, oldSize: jsonBounds.length, newSize: length)
         buffer.initialize(atOffset: jsonBounds.offset, from: bytes, length: length)
     }
     
-    mutating func rewriteStringOrNumber(_ number: Bounds, type: JSONType, at offset: Int) {
+    mutating func addJSONSize(of size: Int) {
+        assert(readOnly.type == .object || readOnly.type == .object)
+        
+        self.pointer.advanced(by: 9).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+            pointer.pointee += Int32(size)
+        }
+    }
+    
+    mutating func rewriteStringOrNumber(_ value: Bounds, type: JSONType, at offset: Int) {
         let oldSize = readOnly.indexLength(atOffset: offset)
         let diff = 9 - oldSize
+        requireCapacity(used + diff)
         
         if diff != 0 {
             let endIndex = offset + oldSize
             let source = pointer + endIndex
             let destination = source + diff
-            memmove(destination, source, size - endIndex)
+            memmove(destination, source, used - endIndex)
         }
         
         pointer[offset] = type.rawValue
         pointer.advanced(by: offset &+ 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
-            pointer[0] = Int32(number.offset)
-            pointer[1] = Int32(number.length)
+            pointer[0] = Int32(value.offset)
+            pointer[1] = Int32(value.length)
         }
-        size = size &+ diff
+        used = used &+ diff
     }
     
     mutating func rewriteNumber(_ number: Bounds, floatingPoint: Bool, at offset: Int) {
@@ -326,12 +386,12 @@ struct JSONDescription {
     
     mutating func describeString(_ string: Bounds, escaped: Bool) {
         requireCapacity(9)
-        pointer[size] = escaped ? JSONType.stringWithEscaping.rawValue : JSONType.string.rawValue
-        pointer.advanced(by: size &+ 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
+        pointer[used] = escaped ? JSONType.stringWithEscaping.rawValue : JSONType.string.rawValue
+        pointer.advanced(by: used &+ 1).withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
             pointer[0] = Int32(string.offset)
             pointer[1] = Int32(string.length)
         }
-        size = size &+ 9
+        used = used &+ 9
     }
     
     mutating func rewriteString(_ string: Bounds, escaped: Bool, at offset: Int) {
@@ -340,86 +400,91 @@ struct JSONDescription {
     
     mutating func describeNull(at offset: Int) {
         requireCapacity(5)
-        pointer[size] = JSONType.null.rawValue
-        pointer.advanced(by: size &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+        pointer[used] = JSONType.null.rawValue
+        pointer.advanced(by: used &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
             pointer.pointee = Int32(offset)
         }
-        size = size &+ 5
+        used = used &+ 5
     }
     
-    mutating func rewriteNull(at offset: Int) {
-        rewriteSingleByteType(to: .null, at: offset)
+    mutating func rewriteNull(at indexOffset: Int, jsonOffset: Int) {
+        rewriteShortType(to: .null, indexOffset: indexOffset, jsonOffset: jsonOffset)
     }
     
-    private mutating func rewriteSingleByteType(to type: JSONType, at offset: Int) {
-        let oldSize = readOnly.indexLength(atOffset: offset)
+    private mutating func rewriteShortType(to type: JSONType, indexOffset: Int, jsonOffset: Int) {
+        let oldSize = readOnly.indexLength(atOffset: indexOffset)
         let diff = 5 - oldSize
         
+        requireCapacity(used + diff)
+        
         if diff != 0 {
-            let endIndex = offset + oldSize
+            let endIndex = indexOffset + oldSize
             let source = pointer + endIndex
             let destination = source + diff
-            memmove(destination, source, size - endIndex)
+            memmove(destination, source, used - endIndex)
         }
         
-        pointer[offset] = type.rawValue
-        pointer.advanced(by: offset &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
-            pointer.pointee = Int32(offset)
+        pointer[indexOffset] = type.rawValue
+        pointer.advanced(by: indexOffset &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+            pointer.pointee = Int32(jsonOffset)
         }
-        size = size &+ diff
+        used = used &+ diff
     }
     
     mutating func describeTrue(at offset: Int) {
         requireCapacity(5)
-        pointer[size] = JSONType.boolTrue.rawValue
-        pointer.advanced(by: size &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+        pointer[used] = JSONType.boolTrue.rawValue
+        pointer.advanced(by: used &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
             pointer.pointee = Int32(offset)
         }
-        size = size &+ 5
+        used = used &+ 5
     }
     
-    mutating func rewriteTrue(at offset: Int) {
-        rewriteSingleByteType(to: .boolTrue, at: offset)
+    mutating func rewriteTrue(at offset: Int, jsonOffset: Int) {
+        rewriteShortType(to: .boolTrue, indexOffset: offset, jsonOffset: jsonOffset)
     }
-    
     mutating func describeFalse(at offset: Int) {
         requireCapacity(5)
-        pointer[size] =  JSONType.boolFalse.rawValue
-        pointer.advanced(by: size &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+        pointer[used] =  JSONType.boolFalse.rawValue
+        pointer.advanced(by: used &+ 1).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
             pointer.pointee = Int32(offset)
         }
-        size = size &+ 5
+        used = used &+ 5
     }
     
-    mutating func rewriteFalse(at offset: Int) {
-        rewriteSingleByteType(to: .boolFalse, at: offset)
+    mutating func rewriteFalse(at offset: Int, jsonOffset: Int) {
+        rewriteShortType(to: .boolFalse, indexOffset: offset, jsonOffset: jsonOffset)
     }
     
-    mutating func rewriteObjectArray(locallyAt localOffset: Int, from description: JSONDescription, at remoteOffset: Int) {
+    mutating func rewriteObjectArray(locallyAt localOffset: Int, from description: JSONDescription, at remoteOffset: Int = 0) {
         let oldLength = self.readOnly.indexLength(atOffset: localOffset)
         let newLength = description.readOnly.indexLength(atOffset: remoteOffset)
         
         let diff = newLength - oldLength
+        requireCapacity(used + diff)
+        
         if diff != 0 {
             let endIndex = localOffset + oldLength
             let source = pointer + endIndex
             let destination = source + diff
-            memmove(destination, source, size - endIndex)
+            memmove(destination, source, used - endIndex)
         }
         
+        assert(localOffset + newLength <= size)
+        assert(remoteOffset + newLength <= description.used)
         memcpy(pointer + localOffset, description.pointer + remoteOffset, newLength)
-        size = size &+ diff
+        used = used &+ diff
     }
     
     /// Run returns the amount of elements written
     mutating func describeArray(atOffset offset: Int) -> UnfinishedDescription {
         requireCapacity(17)
-        pointer[size] = JSONType.array.rawValue
-        let indexStart = size
+        pointer[used] = JSONType.array.rawValue
+        let indexStart = used
         
         // Write the rest later
-        size = size &+ 17
-        let arrayStart = size
+        used = used &+ 17
+        let arrayStart = used
         
         return UnfinishedDescription(dataOffset: offset, indexOffset: indexStart, firtChildIndexOffset: arrayStart)
     }
@@ -427,12 +492,12 @@ struct JSONDescription {
     /// Run returns the amount of elements written
     mutating func describeObject(atOffset offset: Int) -> UnfinishedDescription {
         requireCapacity(17)
-        pointer[size] = JSONType.object.rawValue
-        let indexStart = size
+        pointer[used] = JSONType.object.rawValue
+        let indexStart = used
         
         // Write the rest later
-        size = size &+ 17
-        let objectStart = size
+        used = used &+ 17
+        let objectStart = used
         
         return UnfinishedDescription(dataOffset: offset, indexOffset: indexStart, firtChildIndexOffset: objectStart)
     }
@@ -443,10 +508,10 @@ struct JSONDescription {
         }
         
         pointer.advanced(by: unfinished.indexOffset &+ 1).withMemoryRebound(to: Int32.self, capacity: 4) { pointer in
-            pointer[0] = Int32(result.count) // TODO: Why? WAS: '& 0x00ffffff'
+            pointer[0] = Int32(result.count)
             pointer[1] = numericCast(unfinished.dataOffset)
             pointer[2] = result.byteCount
-            pointer[3] = Int32(size &- unfinished.firtChildIndexOffset)
+            pointer[3] = Int32(used &- unfinished.firtChildIndexOffset)
         }
     }
 }
@@ -470,6 +535,10 @@ struct ReadOnlyJSONDescription {
             return 4
         case .boolFalse:
             return 5
+        case .array, .object:
+            return pointer.advanced(by: 9).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
+                return Int(pointer.pointee)
+            }
         default:
             return pointer.advanced(by: 5).withMemoryRebound(to: Int32.self, capacity: 1) { pointer in
                 return Int(pointer.pointee)
@@ -710,7 +779,7 @@ struct ReadOnlyJSONDescription {
         }
     }
     
-    func bounds(at offset: Int) -> Bounds {
+    func dataBounds(at offset: Int) -> Bounds {
         let type = self.type(atOffset: offset)!
         switch type {
         case .object, .array:
@@ -732,13 +801,45 @@ struct ReadOnlyJSONDescription {
         }
     }
     
+    func jsonBounds(at offset: Int) -> Bounds {
+        let type = self.type(atOffset: offset)!
+        switch type {
+        case .object, .array:
+            return objectArrayBounds(at: offset)
+        case .boolTrue, .boolFalse, .null:
+            return Bounds(
+                offset: constantOffset(at: offset),
+                length: type == .boolFalse ? 5 : 4
+            )
+        case .string, .stringWithEscaping:
+            // Strings are surrounded by `"`
+            return pointer
+                .advanced(by: offset &+ 1)
+                .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
+                    return Bounds(
+                        offset: numericCast(pointer[0]) &- 1,
+                        length: numericCast(pointer[1]) &+ 2
+                    )
+            }
+        case .integer, .floatingNumber:
+            return pointer
+                .advanced(by: offset &+ 1)
+                .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
+                    return Bounds(
+                        offset: numericCast(pointer[0]),
+                        length: numericCast(pointer[1])
+                    )
+            }
+        }
+    }
+    
     private func objectArrayBounds(at offset: Int) -> Bounds {
         return pointer
-            .advanced(by: offset &+ 9)
+            .advanced(by: offset &+ 5)
             .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
                 return Bounds(
-                    offset: numericCast(pointer[1]),
-                    length: numericCast(pointer[0])
+                    offset: numericCast(pointer[0]),
+                    length: numericCast(pointer[1])
                 )
         }
     }
@@ -757,7 +858,7 @@ struct ReadOnlyJSONDescription {
                 return nil
         }
         
-        return (bounds(at: offset), type == .stringWithEscaping)
+        return (dataBounds(at: offset), type == .stringWithEscaping)
     }
     
     func integerBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> Bounds? {
@@ -769,7 +870,7 @@ struct ReadOnlyJSONDescription {
                 return nil
         }
         
-        return bounds(at: offset)
+        return dataBounds(at: offset)
     }
     
     func floatingBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
@@ -781,7 +882,7 @@ struct ReadOnlyJSONDescription {
                 return nil
         }
         
-        return (bounds(at: offset), type == .floatingNumber)
+        return (dataBounds(at: offset), type == .floatingNumber)
     }
 }
 
