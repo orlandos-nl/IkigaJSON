@@ -57,34 +57,5 @@ internal final class Buffer {
         (pointer + offset).bindMemory(to: UInt8.self, capacity: length).initialize(from: bytes, count: length)
     }
     
-    func prepareRewrite(offset: Int, oldSize: Int, newSize: Int) {
-        // `if newSize == 5 && oldSize == 3` then We need to write over 0..<5
-        // Meaning we move the rest back by (5 - 3 = 2)
-        
-        // Or if `newSize == 3 && oldSize == 5` we write over 0..<3 and move forward by 2 (or -2 offset)
-        let diff = newSize - oldSize
-        
-        if diff == 0 { return }
-        
-        if used + diff > used {
-            expandBuffer(to: used + diff)
-        }
-        
-        let endIndex = offset + oldSize
-        let source = pointer + endIndex
-        let destination = source + diff
-        
-        memmove(destination, source, used - endIndex)
-        used = used &+ diff
-    }
-    
-    func slice(bounds: Bounds) -> Buffer {
-        let buffer = Buffer(allocating: bounds.length)
-        let source = self.pointer.assumingMemoryBound(to: UInt8.self) + bounds.offset
-        buffer.initialize(atOffset: 0, from: source, length: bounds.length)
-        buffer.used = bounds.length
-        return buffer
-    }
-    
     deinit { pointer.deallocate() }
 }

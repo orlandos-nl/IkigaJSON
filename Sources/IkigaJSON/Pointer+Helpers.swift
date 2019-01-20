@@ -1,3 +1,5 @@
+import NIO
+
 // Lazily generate and load all exponents
 // TODO: Compile time?
 fileprivate let exponents: [Double] = {
@@ -53,6 +55,28 @@ extension UnsafePointer where Pointee == UInt8 {
     }
 }
 
+internal let allocator = ByteBufferAllocator()
+
+extension UnsafeRawPointer {
+    var uint8: UnsafePointer<UInt8> {
+        return self.assumingMemoryBound(to: UInt8.self)
+    }
+    
+    var int32: UnsafePointer<Int32> {
+        return self.assumingMemoryBound(to: Int32.self)
+    }
+}
+
+extension UnsafeMutableRawPointer {
+    var uint8: UnsafeMutablePointer<UInt8> {
+        return self.assumingMemoryBound(to: UInt8.self)
+    }
+    
+    var int32: UnsafeMutablePointer<Int32> {
+        return self.assumingMemoryBound(to: Int32.self)
+    }
+}
+
 extension UnsafePointer where Pointee: Equatable {
     func peek(for element: Pointee, from baseIndex: Int = 0, untilIndex index: Int) -> Int? {
         var i = baseIndex
@@ -69,7 +93,7 @@ extension UnsafePointer where Pointee: Equatable {
     }
 }
 
-extension UInt8 {
+internal extension UInt8 {
     static let tab: UInt8 = 0x09
     static let newLine: UInt8 = 0x0a
     static let carriageReturn: UInt8 = 0x0d

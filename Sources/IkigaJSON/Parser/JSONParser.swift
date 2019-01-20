@@ -13,7 +13,7 @@ internal struct JSONParser {
     /// This is a separate function so the allocated description buffer can be reused.
     mutating func recycle(pointer: UnsafePointer<UInt8>, count: Int) {
         description.recycle()
-        self.totalOffset = 0
+        self.currentOffset = 0
         self.pointer = pointer
         self.count = count
     }
@@ -24,7 +24,7 @@ internal struct JSONParser {
     internal var description = JSONDescription()
     
     /// The amount of parsed bytes from the `pointer`. Also the first index we have to parse next since programmers start at 0
-    internal private(set) var totalOffset = 0
+    internal private(set) var currentOffset = 0
     
     /// The pointer that will be parsed
     internal private(set) var pointer: UnsafePointer<UInt8>
@@ -34,7 +34,7 @@ internal struct JSONParser {
     
     /// Advances the amount of bytes processed and updates the related offset and count
     internal mutating func advance(_ offset: Int) {
-        totalOffset = totalOffset &+ offset
+        currentOffset = currentOffset &+ offset
         pointer += offset
         count = count &- offset
     }

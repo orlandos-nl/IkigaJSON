@@ -13,6 +13,7 @@ internal enum JSONError: Error {
     case internalStateError
     case invalidDate(String?)
     case invalidData(String?)
+    case endOfObject
     case missingKeyedContainer
     case missingUnkeyedContainer
     case decodingError(expected: Any.Type, keyPath: [CodingKey])

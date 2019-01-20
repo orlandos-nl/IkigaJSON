@@ -72,9 +72,8 @@ public final class IkigaJSONDecoder {
             parser.recycle(pointer: pointer, count: buffer.count)
         }
         try parser.scanValue()
-        let readOnly = parser.description.readOnly
         
-        let decoder = _JSONDecoder(description: readOnly, pointer: pointer, settings: settings)
+        let decoder = _JSONDecoder(description: parser!.description.readOnly, pointer: pointer, settings: settings)
         let type = try D(from: decoder)
         return type
     }
@@ -126,7 +125,7 @@ fileprivate struct _JSONDecoder: Decoder {
     }
     
     func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> where Key : CodingKey {
-        guard description.type == .object else {
+        guard description.topLevelType == .object else {
             throw JSONError.missingKeyedContainer
         }
         
@@ -135,7 +134,7 @@ fileprivate struct _JSONDecoder: Decoder {
     }
     
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
-        guard description.type == .array else {
+        guard description.topLevelType == .array else {
             throw JSONError.missingUnkeyedContainer
         }
         
@@ -253,21 +252,21 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        guard let type = decoder.description.type(
+        guard let jsonType = decoder.description.type(
             ofKey: decoder.string(forKey: key),
             convertingSnakeCasing: self.decoder.snakeCasing,
             in: decoder.pointer
         ) else {
-            throw JSONError.decodingError(expected: Bool.self, keyPath: codingPath + [key])
+            throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
         
-        switch type {
+        switch jsonType {
         case .boolTrue:
             return true
         case .boolFalse:
             return false
         default:
-            throw JSONError.decodingError(expected: Bool.self, keyPath: codingPath + [key])
+            throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
     }
     
@@ -293,7 +292,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             convertingSnakeCasing: self.decoder.snakeCasing,
             in: decoder.pointer
         ) else {
-            throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])
+            throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
         
         guard let string = bounds.makeString(
@@ -301,7 +300,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             escaping: escaped,
             unicode: decoder.settings.decodeUnicode
         ) else {
-            throw JSONError.decodingError(expected: String.self, keyPath: codingPath + [key])
+            throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
         
         return string
@@ -451,25 +450,28 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func decodeNil() throws -> Bool {
-        guard !isAtEnd, let type = JSONType(rawValue: decoder.description.pointer[offset]) else {
-            throw JSONError.internalStateError
-        }
+        try assertHasMore()
         
+        let type = decoder.description.type(atOffset: offset)
         skipValue()
         return type == .null
     }
     
     mutating func skipValue() {
-        decoder.description.skip(withOffset: &offset)
+        decoder.description.skipIndex(atOffset: &offset)
         currentIndex = currentIndex &+ 1
     }
     
-    mutating func decode(_ type: Bool.Type) throws -> Bool {
-        guard let type = JSONType(rawValue: decoder.description.pointer[offset]) else {
-            throw JSONError.internalStateError
+    func assertHasMore() throws {
+        guard !isAtEnd else {
+            throw JSONError.endOfObject
         }
-        
-        decoder.description.skip(withOffset: &offset)
+    }
+    
+    mutating func decode(_ type: Bool.Type) throws -> Bool {
+        try assertHasMore()
+        let type = decoder.description.type(atOffset: offset)
+        decoder.description.skipIndex(atOffset: &offset)
         skipValue()
         
         switch type {
@@ -481,63 +483,44 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func floatingBounds() -> (Bounds, Bool)? {
+        if isAtEnd { return nil }
+        
+        let type = decoder.description.type(atOffset: offset)
+        
         guard
-            let type = JSONType(rawValue: decoder.description.pointer[offset]),
             type == .integer || type == .floatingNumber
-            else {
-                return nil
+        else {
+            return nil
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
-        
+        let bounds = decoder.description.dataBounds(atIndexOffset: offset)
         skipValue()
         return (bounds, type == .floatingNumber)
     }
     
     mutating func integerBounds() -> Bounds? {
-        guard
-            let type = JSONType(rawValue: decoder.description.pointer[offset]),
-            type == .integer
-            else {
-                return nil
+        if isAtEnd { return nil }
+        
+        let type = decoder.description.type(atOffset: offset)
+        
+        if type != .integer {
+            return nil
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
-        
+        let bounds = decoder.description.dataBounds(atIndexOffset: offset)
         skipValue()
         return bounds
     }
     
     mutating func decode(_ type: String.Type) throws -> String {
-        guard
-            let type = JSONType(rawValue: decoder.description.pointer[offset]),
-            type == .string || type == .stringWithEscaping
-        else {
+        try assertHasMore()
+        let type = decoder.description.type(atOffset: offset)
+        
+        if type != .string && type != .stringWithEscaping {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath)
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: offset &+ 1)
-            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-            }
+        let bounds = decoder.description.dataBounds(atIndexOffset: offset)
         
         guard let string = bounds.makeString(
             from: decoder.pointer,
@@ -654,74 +637,48 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     let decoder: _JSONDecoder
     
     func decodeNil() -> Bool {
-        return decoder.description.type == .null
+        return decoder.description.topLevelType == .null
     }
     
     func floatingBounds() -> (Bounds, Bool)? {
-        guard
-            let type = JSONType(rawValue: decoder.description.pointer.pointee),
-            type == .integer || type == .floatingNumber
-        else {
+        let type = decoder.description.topLevelType
+        
+        if type != .integer && type != .floatingNumber {
             return nil
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
-        
+        let bounds = decoder.description.dataBounds(atIndexOffset: 0)
         return (bounds, type == .floatingNumber)
     }
     
     func integerBounds() -> Bounds? {
-        guard
-            let type = JSONType(rawValue: decoder.description.pointer.pointee),
-            type == .integer
-        else {
+        if decoder.description.topLevelType != .integer {
             return nil
         }
         
-        return decoder.description.pointer
-            .advanced(by: 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
+        return decoder.description.dataBounds(atIndexOffset: 0)
     }
     
     func decode(_ type: Bool.Type) throws -> Bool {
-        switch decoder.description.type {
+        switch decoder.description.topLevelType {
         case .boolTrue: return true
         case .boolFalse: return false
-        default: throw JSONError.decodingError(expected: Bool.self, keyPath: codingPath)
+        default: throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
     }
     
     func decode(_ type: String.Type) throws -> String {
-        let type = decoder.description.type
+        let jsonType = decoder.description.topLevelType
         
-        guard type == .string || type == .stringWithEscaping else {
-            throw JSONError.decodingError(expected: String.self, keyPath: codingPath)
+        guard jsonType == .string || jsonType == .stringWithEscaping else {
+            throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: 1)
-            .withMemoryRebound(to: UInt32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
+        let bounds = decoder.description.dataBounds(atIndexOffset: 0)
         
         guard let string = bounds.makeString(
             from: decoder.pointer,
-            escaping: type == .stringWithEscaping,
+            escaping: jsonType == .stringWithEscaping,
             unicode: decoder.settings.decodeUnicode
         ) else {
             throw JSONError.decodingError(expected: String.self, keyPath: codingPath)
@@ -793,18 +750,13 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     }
     
     func decodeInt<F: FixedWidthInteger>(ofType type: F.Type) throws -> F {
-        guard decoder.description.pointer.pointee == JSONType.integer.rawValue else {
+        let jsonType = decoder.description.topLevelType
+        
+        guard jsonType == .integer else {
             throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
         
-        let bounds = decoder.description.pointer
-            .advanced(by: 1)
-            .withMemoryRebound(to: Int32.self, capacity: 2) { pointer in
-                return Bounds(
-                    offset: numericCast(pointer[0]),
-                    length: numericCast(pointer[1])
-                )
-        }
+        let bounds = decoder.description.dataBounds(atIndexOffset: 0)
         
         guard let int = bounds.makeInt(from: self.decoder.pointer) else {
             throw JSONError.decodingError(expected: type, keyPath: codingPath)

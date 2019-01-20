@@ -54,6 +54,70 @@ public struct JSONEncoderSettings {
     }
 }
 
+/// A type that automatically deallocated the pointer and can be expanded manually or automatically.
+///
+/// Has a few helpers for writing binary data. Mainly/only used for the JSONDescription.
+final class AutoDeallocatingPointer {
+    var pointer: UnsafeMutablePointer<UInt8>
+    private(set) var totalSize: Int
+    
+    init(size: Int) {
+        self.pointer = .allocate(capacity: size)
+        totalSize = size
+    }
+    
+    /// Expands the buffer to it's new absolute size and copies the usedCapacity to the new buffer.
+    ///
+    /// Any data after the userCapacity is lost
+    func expand(to count: Int, usedCapacity size: Int) {
+        let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        new.assign(from: pointer, count: size)
+        pointer.deallocate()
+        
+        self.totalSize = count
+        self.pointer = new
+    }
+    
+    /// Expects `offset + count` bytes in this buffer, if this buffer is too small it's expanded
+    private func beforeWrite(offset: Int, count: Int) {
+        let needed = (offset &+ count) &- totalSize
+        
+        if needed > 0 {
+            // A fat fingered number that will usually be efficient
+            let newSize = offset &+ max(count, 4096)
+            expand(to: newSize, usedCapacity: offset)
+        }
+    }
+    
+    /// Inserts the byte into this storage
+    func insert(_ byte: UInt8, at offset: inout Int) {
+        beforeWrite(offset: offset, count: 1)
+        self.pointer.advanced(by: offset).pointee = byte
+        offset = offset &+ 1
+    }
+    
+    /// Inserts the other autdeallocated storage into this storage
+    func insert(contentsOf storage: AutoDeallocatingPointer, count: Int, at offset: inout Int) {
+        beforeWrite(offset: offset, count: count)
+        self.pointer.advanced(by: offset).assign(from: storage.pointer, count: count)
+        offset = offset &+ count
+    }
+    
+    /// Inserts the bytes into this storage
+    func insert(contentsOf storage: [UInt8], at offset: inout Int) {
+        let count = storage.count
+        beforeWrite(offset: offset, count: count)
+        self.pointer.advanced(by: offset).assign(from: storage, count: count)
+        offset = offset &+ count
+    }
+    
+    deinit {
+        /// The magic of this class, automatically deallocating thanks to ARC
+        pointer.deallocate()
+    }
+}
+
+
 /// A JSON Encoder that aims to be largely functionally equivalent to Foundation.JSONEncoder.
 public struct IkigaJSONEncoder {
     public var userInfo = [CodingUserInfoKey : Any]()

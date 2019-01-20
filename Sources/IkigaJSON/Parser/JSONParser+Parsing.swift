@@ -5,30 +5,45 @@ extension JSONParser {
     internal mutating func scanArray() throws {
         assert(pointer.pointee == .squareLeft, "An array was scanned but the first byte was not `[`")
         
+        // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
         
-        let array = description.describeArray(atOffset: totalOffset)
-        let offset = totalOffset
+        // Start describing the array, this is not complete yet, merely a placeholder
+        let array = description.describeArray(atJSONOffset: Int32(currentOffset))
+        let startOffset = currentOffset
+        
+        // Skip past the array open `[`
         advance(1)
-        var count: Int32 = 0
+        
+        var arrayCount: Int32 = 0
         
         repeat {
+            // Whitespace before the comma
             try skipWhitespace()
             
+            // Check for end of array or comma
             if pointer.pointee == .squareRight {
+                // End of array
                 advance(1)
-                let result = _ArrayObjectDescription(count: count, byteCount: Int32(totalOffset &- offset))
+                
+                // Complete the array description
+                let result = _ArrayObjectDescription(valueCount: arrayCount, jsonByteCount: Int32(currentOffset &- startOffset))
                 return description.complete(array, withResult: result)
             } else if didParseFirstValue, nextByte() != .comma {
+                // No comma here means this is invalid JSON
+                // Commas are required between each element
                 throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
             } else {
+                // Parsed a comma, always override didParseFirstValue
+                // Overwriting this in the stack is not heavier than an if statement
                 didParseFirstValue = true
             }
             
-            try skipWhitespace() // needed because of the comma
-            try scanValue()
+            // Whitespace after the comma
+            try skipWhitespace()
             
-            count = count &+ 1
+            try scanValue()
+            arrayCount = arrayCount &+ 1
         } while hasMoreData
         
         throw JSONError.missingData
@@ -38,23 +53,35 @@ extension JSONParser {
     internal mutating func scanObject() throws {
         assert(pointer.pointee == .curlyLeft, "An object was scanned but the first byte was not `{`")
         
+        // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
         
-        let object = description.describeObject(atOffset: totalOffset)
-        let offset = totalOffset
+        // Start describing the object, this is not complete yet, merely a placeholder
+        let object = description.describeObject(atJSONOffset: Int32(currentOffset))
+        let startOffset = currentOffset
+        
+        // Skip past the object open `{`
         advance(1)
-        var count: Int32 = 0
+        
+        var pairCount: Int32 = 0
         
         repeat {
             try skipWhitespace()
             
             if pointer.pointee == .curlyRight {
+                // End of object
                 advance(1)
-                let result = _ArrayObjectDescription(count: count, byteCount: Int32(totalOffset &- offset))
+                
+                // Complete the object description
+                let result = _ArrayObjectDescription(valueCount: pairCount, jsonByteCount: Int32(currentOffset &- startOffset))
                 return description.complete(object, withResult: result)
             } else if didParseFirstValue, nextByte() != .comma {
+                // No comma here means this is invalid JSON because a value was already parsed
+                // Commas are required between each element
                 throw JSONError.unexpectedToken(pointer.pointee, reason: .expectedComma)
             } else {
+                // Parsed a comma, always override didParseFirstValue
+                // Overwriting this in the stack is not heavier than an if statement
                 didParseFirstValue = true
             }
             
@@ -69,7 +96,7 @@ extension JSONParser {
             try skipWhitespace()
             try scanValue()
             
-            count = count &+ 1
+            pairCount = pairCount &+ 1
         } while hasMoreData
         
         throw JSONError.missingData
@@ -98,7 +125,7 @@ extension JSONParser {
             }
             
             advance(5)
-            description.describeFalse(at: totalOffset)
+            description.describeFalse(atJSONOffset: Int32(currentOffset))
         case .t: // true
             guard count > 4 else {
                 throw JSONError.missingData
@@ -109,7 +136,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeTrue(at: totalOffset)
+            description.describeTrue(atJSONOffset: Int32(currentOffset))
         case .n: // null
             guard count > 4 else {
                 throw JSONError.missingData
@@ -120,7 +147,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeNull(at: totalOffset)
+            description.describeNull(atJSONOffset: Int32(currentOffset))
         case .zero ... .nine, .minus:// Numerical
             try scanNumber()
         default:
@@ -141,12 +168,12 @@ extension JSONParser {
     ///
     /// We don't copy the number out here, this saves performance in many areas
     fileprivate mutating func scanNumber() throws {
-        var length = 1
+        var byteLength = 1
         var floating = false
         
         /// We don't parse/copy the integer out yet
-        loop: while length < count {
-            let byte = pointer[length]
+        loop: while byteLength < count {
+            let byte = pointer[byteLength]
             
             if byte < .zero || byte > .nine {
                 if byte != .fullStop, byte != .e, byte != .E, byte != .plus, byte != .minus {
@@ -154,22 +181,21 @@ extension JSONParser {
                 }
                 
                 // not a first minus sign
-                floating = byte != .minus || length > 1
+                floating = byte != .minus || byteLength > 1
             }
             
-            length = length &+ 1
+            byteLength = byteLength &+ 1
         }
         
         // Only a minus was parsed
-        if floating && length == 1 {
+        if floating && byteLength == 1 {
             throw JSONError.unexpectedToken(.minus, reason: .expectedValue)
         }
         
-        let start = totalOffset
-        advance(length)
-        let bounds = Bounds(offset: start, length: length)
-        
-        description.describeNumber(bounds, floatingPoint: floating)
+        let start = currentOffset
+        advance(byteLength)
+        let bounds = Bounds(offset: Int32(start), length: Int32(byteLength))
+        description.describeNumber(at: bounds, floatingPoint: floating)
     }
     
     /// Scans a String literal at the current offset and writes it to the description. Used for values as well as object keys
@@ -181,25 +207,25 @@ extension JSONParser {
         }
         
         // The offset is calculated and written later, updating the offset too much results in performance loss
-        var offset = 1
+        var currentIndex: Int = 1
         
         // If any excaping character is detected, it will be noted
         // This reduces the performance cost on parsing most strings, removing a second unneccessary check
         var didEscape = false
         
         defer {
-            advance(offset)
+            advance(currentIndex)
         }
         
-        while offset < count {
-            defer { offset = offset &+ 1 }
+        while currentIndex < count {
+            defer { currentIndex = currentIndex &+ 1 }
             
-            let byte = pointer[offset]
+            let byte = pointer[currentIndex]
             
             // If it's a quote, check if it's escaped
             if byte == .quote {
                 var escaped = false
-                var backwardsOffset = offset &- 1
+                var backwardsOffset = currentIndex &- 1
                 
                 // Every escaped character can have another escaped character
                 escapeLoop: while backwardsOffset > 1 {
@@ -215,9 +241,9 @@ extension JSONParser {
                 }
                 
                 if !escaped {
-                    // Minus the first quote, seocnd quote hasn't been added to offset yet as `defer` didn't trigger
-                    let bounds = Bounds(offset: totalOffset &+ 1, length: offset &- 1)
-                    description.describeString(bounds, escaped: didEscape)
+                    // Defer didn't trigger yet
+                    let bounds = Bounds(offset: Int32(currentOffset), length: Int32(currentIndex &+ 1))
+                    description.describeString(at: bounds, escaped: didEscape)
                     return
                 }
             } else if byte == .backslash {
