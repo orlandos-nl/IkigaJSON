@@ -1,4 +1,5 @@
 import Foundation
+import NIO
 
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings {
@@ -139,6 +140,14 @@ public struct IkigaJSONEncoder {
         try value.encode(to: encoder)
         encoder.writeEnd()
         return Data(bytes: encoder.data.pointer, count: encoder.offset)
+    }
+    
+    public func encodeAndWrite<E: Encodable>(_ value: E, into buffer: inout ByteBuffer) throws {
+        let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
+        try value.encode(to: encoder)
+        encoder.writeEnd()
+        let data = UnsafeRawBufferPointer(start: encoder.data.pointer, count: encoder.offset)
+        buffer.write(bytes: data)
     }
 }
 

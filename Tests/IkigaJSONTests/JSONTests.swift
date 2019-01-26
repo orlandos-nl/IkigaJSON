@@ -1,4 +1,5 @@
 import XCTest
+import NIO
 import Foundation
 import IkigaJSON
 
@@ -71,6 +72,47 @@ final class IkigaJSONTests: XCTestCase {
         }
         
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
+    func testStreamingEncode() throws {
+        let encoder = IkigaJSONEncoder()
+        
+        struct User: Codable {
+            let id: String
+            let username: String
+            let role: String
+            let awesome: Bool
+            let superAwesome: Bool
+        }
+        
+        let user0 = User(id: "0", username: "Joannis", role: "Admin", awesome: true, superAwesome: true)
+        let user1 = User(id: "1", username: "Obbut", role: "Admin", awesome: true, superAwesome: true)
+        
+        let allocator = ByteBufferAllocator()
+        var buffer = allocator.buffer(capacity: 4_096)
+        buffer.write(staticString: "[")
+        try encoder.encodeAndWrite(user0, into: &buffer)
+        buffer.write(staticString: ",")
+        try encoder.encodeAndWrite(user1, into: &buffer)
+        buffer.write(staticString: "]")
+        
+        let users = try JSONArray(buffer: buffer)
+        XCTAssertEqual(users.count, 2)
+        
+        XCTAssertEqual(users[0]["id"] as? String, "0")
+        XCTAssertEqual(users[0]["username"] as? String, "Joannis")
+        
+        XCTAssertEqual(users[1]["id"] as? String, "1")
+        XCTAssertEqual(users[1]["username"] as? String, "Obbut")
+        
+        let users2 = try newParser.decode([User].self, from: buffer)
+        XCTAssertEqual(users2.count, 2)
+        
+        XCTAssertEqual(users2[0].id, "0")
+        XCTAssertEqual(users2[0].username, "Joannis")
+        
+        XCTAssertEqual(users2[1].id, "1")
+        XCTAssertEqual(users2[1].username, "Obbut")
     }
     
     func testMissingEndOfObject() {
