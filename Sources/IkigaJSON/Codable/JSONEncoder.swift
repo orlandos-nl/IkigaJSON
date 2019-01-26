@@ -103,6 +103,13 @@ final class AutoDeallocatingPointer {
         offset = offset &+ count
     }
     
+    /// Inserts the other autdeallocated storage into this storage
+    func insert(contentsOf storage: StaticString, at offset: inout Int) {
+        beforeWrite(offset: offset, count: storage.utf8CodeUnitCount)
+        self.pointer.advanced(by: offset).assign(from: storage.utf8Start, count: storage.utf8CodeUnitCount)
+        offset = offset &+ storage.utf8CodeUnitCount
+    }
+    
     /// Inserts the bytes into this storage
     func insert(contentsOf storage: [UInt8], at offset: inout Int) {
         let count = storage.count
@@ -135,9 +142,9 @@ public struct IkigaJSONEncoder {
     }
 }
 
-internal let nullBytes: [UInt8] = [.n, .u, .l, .l]
-internal let boolTrue: [UInt8] = [.t, .r, .u, .e]
-internal let boolFalse: [UInt8] = [.f, .a, .l, .s, .e]
+internal let nullBytes: StaticString = "null"
+internal let boolTrue: StaticString = "true"
+internal let boolFalse: StaticString = "false"
 
 fileprivate final class _JSONEncoder: Encoder {
     var codingPath: [CodingKey]

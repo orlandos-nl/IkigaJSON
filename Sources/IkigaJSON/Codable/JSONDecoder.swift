@@ -73,7 +73,7 @@ public final class IkigaJSONDecoder {
         }
         try parser.scanValue()
         
-        let decoder = _JSONDecoder(description: parser!.description.readOnly, pointer: pointer, settings: settings)
+        let decoder = _JSONDecoder(description: parser!.description, pointer: pointer, settings: settings)
         let type = try D(from: decoder)
         return type
     }
@@ -106,7 +106,7 @@ public final class IkigaJSONDecoder {
 }
 
 fileprivate struct _JSONDecoder: Decoder {
-    let description: ReadOnlyJSONDescription
+    let description: JSONDescription
     let pointer: UnsafePointer<UInt8>
     let settings: JSONDecoderSettings
     var snakeCasing: Bool
@@ -145,7 +145,7 @@ fileprivate struct _JSONDecoder: Decoder {
         return SingleValueJSONDecodingContainer(decoder: self)
     }
     
-    init(description: ReadOnlyJSONDescription, pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
+    init(description: JSONDescription, pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
         self.description = description
         self.pointer = pointer
         self.settings = settings

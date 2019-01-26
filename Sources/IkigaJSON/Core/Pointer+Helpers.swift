@@ -55,43 +55,16 @@ extension UnsafePointer where Pointee == UInt8 {
     }
 }
 
-internal let allocator = ByteBufferAllocator()
-
-extension UnsafeRawPointer {
-    var uint8: UnsafePointer<UInt8> {
-        return self.assumingMemoryBound(to: UInt8.self)
-    }
-    
-    var int32: UnsafePointer<Int32> {
-        return self.assumingMemoryBound(to: Int32.self)
-    }
-}
-
-extension UnsafeMutableRawPointer {
-    var uint8: UnsafeMutablePointer<UInt8> {
-        return self.assumingMemoryBound(to: UInt8.self)
-    }
-    
-    var int32: UnsafeMutablePointer<Int32> {
-        return self.assumingMemoryBound(to: Int32.self)
-    }
-}
-
-extension UnsafePointer where Pointee: Equatable {
-    func peek(for element: Pointee, from baseIndex: Int = 0, untilIndex index: Int) -> Int? {
-        var i = baseIndex
-        
-        while i < index {
-            if self[i] == element {
-                return i
-            }
-            
-            i = i &+ 1
+extension ByteBuffer {
+    func withBytePointer<T>(_ run: (UnsafePointer<UInt8>) throws -> T) rethrows -> T {
+        return try withUnsafeReadableBytes { buffer in
+            let buffer = buffer.bindMemory(to: UInt8.self)
+            return try run(buffer.baseAddress!)
         }
-        
-        return nil
     }
 }
+
+internal let allocator = ByteBufferAllocator()
 
 internal extension UInt8 {
     static let tab: UInt8 = 0x09
