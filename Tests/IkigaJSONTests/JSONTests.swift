@@ -6,6 +6,10 @@ var newParser: IkigaJSONDecoder {
     return IkigaJSONDecoder()
 }
 
+//var parser: JSONDecoder {
+//    return JSONDecoder()
+//}
+
 var newEncoder: IkigaJSONEncoder {
     return IkigaJSONEncoder()
 }
@@ -485,7 +489,9 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        _ = try! newParser.decode(User.self, from: data)
+        for _ in 0..<100_000 {
+            _ = try! newParser.decode(User.self, from: data)
+        }
     }
     
     func testObjectAccess() {

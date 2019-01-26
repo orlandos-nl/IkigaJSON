@@ -1,4 +1,5 @@
 import Foundation
+import NIO
 
 @available(OSX 10.12, *)
 let isoFormatter = ISO8601DateFormatter()
@@ -84,6 +85,13 @@ public final class IkigaJSONDecoder {
         
         return try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
             return try decode(type, from: UnsafeBufferPointer(start: pointer, count: count))
+        }
+    }
+    
+    /// Parses the Decodable type from a SwiftNIO `ByteBuffer`.
+    public func decode<D: Decodable>(_ type: D.Type, from byteBuffer: ByteBuffer) throws -> D {
+        return try byteBuffer.withUnsafeReadableBytes { buffer in
+            return try self.decode(type, from: buffer.bindMemory(to: UInt8.self))
         }
     }
     
