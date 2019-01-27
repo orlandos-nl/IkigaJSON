@@ -2,7 +2,7 @@ import Foundation
 import NIO
 
 public struct JSONArray: ExpressibleByArrayLiteral {
-    var jsonBuffer: ByteBuffer
+    public private(set) var jsonBuffer: ByteBuffer
     var description: JSONDescription
     
     public var data: Data {

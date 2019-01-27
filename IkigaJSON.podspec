@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'IkigaJSON'
-  s.version          = '1.0.3'
+  s.version          = '1.1.0'
   s.summary          = 'A High performance JSON Codable implementation.'
 
   s.swift_version = '4.1'
@@ -21,4 +21,5 @@ Pod::Spec.new do |s|
   s.ios.deployment_target   = '10.0'
 
   s.source_files     = 'Sources/IkigaJSON/**/*'
+  s.dependency 'SwiftNIO', '~> 1.12'
 end
