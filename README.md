@@ -84,6 +84,8 @@ By design you can build on top of any data storage as long as it exposes a point
 TODO:
 
 - `\u` escaped unicode characters
+- Codable decoding from `JSONObject` and `JSONArray`
+- Lightweight JSON inline comparison helpers
 
 ### Media
 
