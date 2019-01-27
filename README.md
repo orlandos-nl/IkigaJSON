@@ -46,8 +46,6 @@ print(user.string)
 
 ### SwiftNIO support
 
-Note, this is disabled on iOS build environments.
-
 The encoders and decoders support SwiftNIO.
 
 ```swift
