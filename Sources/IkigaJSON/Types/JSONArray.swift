@@ -29,12 +29,16 @@ public struct JSONArray: ExpressibleByArrayLiteral {
     }
     
     public init() {
+        self.init(descriptionSize: 4_096)
+    }
+    
+    private init(descriptionSize: Int) {
         var buffer = allocator.buffer(capacity: 4_096)
         buffer.write(integer: UInt8.squareLeft)
         buffer.write(integer: UInt8.squareRight)
         self.jsonBuffer = buffer
         
-        var description = JSONDescription()
+        var description = JSONDescription(size: descriptionSize)
         let partialObject = description.describeArray(atJSONOffset: 0)
         let result = _ArrayObjectDescription(valueCount: 0, jsonByteCount: 2)
         description.complete(partialObject, withResult: result)

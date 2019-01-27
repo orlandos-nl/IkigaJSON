@@ -16,11 +16,15 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
     }
     
     public init() {
+        self.init(descriptionSize: 4_096)
+    }
+    
+    private init(descriptionSize: Int) {
         self.jsonBuffer = allocator.buffer(capacity: 4_096)
         jsonBuffer.write(integer: UInt8.curlyLeft)
         jsonBuffer.write(integer: UInt8.curlyRight)
         
-        var description = JSONDescription()
+        var description = JSONDescription(size: descriptionSize)
         let partialObject = description.describeObject(atJSONOffset: 0)
         let result = _ArrayObjectDescription(valueCount: 0, jsonByteCount: 2)
         description.complete(partialObject, withResult: result)
@@ -42,7 +46,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
     }
     
     public init(dictionaryLiteral elements: (String, JSONValue)...) {
-        self.init()
+        self.init(descriptionSize: 4096)
         
         for (key, value) in elements {
             self[key] = value

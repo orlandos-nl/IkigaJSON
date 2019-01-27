@@ -6,6 +6,7 @@ internal struct JSONParser {
     internal init(pointer: UnsafePointer<UInt8>, count: Int) {
         self.pointer = pointer
         self.count = count
+        self.description = JSONDescription(size: min(max(count, 4096), 16_777_216))
     }
     
     /// Recycles this JSONParser for a second initialization and parsing
@@ -21,7 +22,7 @@ internal struct JSONParser {
     /// This description is where we write a binary format that describes the JSON data.
     ///
     /// It's made to be highly performant in parsing and slicing JSON
-    internal var description = JSONDescription()
+    internal var description: JSONDescription
     
     /// The amount of parsed bytes from the `pointer`. Also the first index we have to parse next since programmers start at 0
     internal private(set) var currentOffset = 0
