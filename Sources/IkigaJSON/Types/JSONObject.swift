@@ -2,7 +2,7 @@ import Foundation
 import NIO
 
 public struct JSONObject: ExpressibleByDictionaryLiteral {
-    public private(set) var jsonBuffer: ByteBuffer
+    public internal(set) var jsonBuffer: ByteBuffer
     var description: JSONDescription
     
     public var data: Data {
