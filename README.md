@@ -7,13 +7,13 @@ IkigaJSON is a really fast JSON parser. It performed ~4x faster in our tests whe
 SPM:
 
 ```swift
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.0.0"),
+.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.1.0"),
 ```
 
 Cocoapods:
 
 ```swift
-pod 'IkigaJSON', '~> 1.0'
+pod 'IkigaJSON', '~> 1.1'
 ```
 
 ### Usage
@@ -84,6 +84,8 @@ By design you can build on top of any data storage as long as it exposes a point
 TODO:
 
 - `\u` escaped unicode characters
+- Codable decoding from `JSONObject` and `JSONArray`
+- Lightweight JSON inline comparison helpers
 
 ### Media
 
