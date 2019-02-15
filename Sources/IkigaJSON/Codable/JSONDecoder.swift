@@ -10,7 +10,7 @@ let dateFormatter: DateFormatter = {
 }()
 
 #if os(Linux) && !swift(>=5.0)
-extension JSONEncoder {
+extension JSONDecoder {
     public enum KeyDecodingStrategy {
         case useDefaultKeys
         case convertFromSnakeCase
