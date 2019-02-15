@@ -14,7 +14,7 @@ extension JSONDecoder {
     public enum KeyDecodingStrategy {
         case useDefaultKeys
         case convertFromSnakeCase
-        case custom(@escaping ([CodingKey]) -> CodingKey)
+        case custom(([CodingKey]) -> CodingKey)
     }
 }
 #endif

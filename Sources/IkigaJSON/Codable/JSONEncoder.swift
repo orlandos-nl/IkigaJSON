@@ -6,7 +6,7 @@ extension JSONEncoder {
     public enum KeyEncodingStrategy {
         case useDefaultKeys
         case convertToSnakeCase
-        case custom(@escaping ([CodingKey]) -> CodingKey)
+        case custom(([CodingKey]) -> CodingKey)
     }
 }
 #endif
