@@ -8,6 +8,16 @@ let dateFormatter: DateFormatter = {
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
     return formatter
 }()
+
+#if os(Linux) && !swift(>=5.0)
+extension JSONEncoder {
+    public enum KeyDecodingStrategy {
+        case useDefaultKeys
+        case convertFromSnakeCase
+        case custom(@escaping ([CodingKey]) -> CodingKey)
+    }
+}
+#endif
     
 func date(from string: String) throws -> Date {
     if #available(OSX 10.12, iOS 11, *) {
