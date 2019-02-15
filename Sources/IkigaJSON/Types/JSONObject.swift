@@ -11,12 +11,24 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         }
     }
     
+    public var keys: [String] {
+        return jsonBuffer.withBytePointer { pointer in
+            return self.description.keys(inPointer: pointer, unicode: true, convertingSnakeCasing: false)
+        }
+    }
+    
     public var string: String! {
         return String(data: data, encoding: .utf8)
     }
     
     public init() {
         self.init(descriptionSize: 4_096)
+    }
+    
+    public init(data: Data) throws {
+        var buffer = allocator.buffer(capacity: data.count)
+        buffer.write(bytes: data)
+        try self.init(buffer: buffer)
     }
     
     private init(descriptionSize: Int) {

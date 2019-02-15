@@ -1,7 +1,7 @@
 import Foundation
 import NIO
 
-public struct JSONArray: ExpressibleByArrayLiteral {
+public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
     public internal(set) var jsonBuffer: ByteBuffer
     var description: JSONDescription
     
@@ -13,6 +13,12 @@ public struct JSONArray: ExpressibleByArrayLiteral {
     
     public var string: String! {
         return String(data: data, encoding: .utf8)
+    }
+    
+    public init(data: Data) throws {
+        var buffer = allocator.buffer(capacity: data.count)
+        buffer.write(bytes: data)
+        try self.init(buffer: buffer)
     }
     
     public init(buffer: ByteBuffer) throws {
@@ -44,6 +50,10 @@ public struct JSONArray: ExpressibleByArrayLiteral {
         description.complete(partialObject, withResult: result)
         
         self.description = description
+    }
+    
+    public func makeIterator() -> JSONArrayIterator {
+        return JSONArrayIterator(array: self)
     }
     
     public init(arrayLiteral elements: JSONValue...) {
@@ -234,5 +244,22 @@ extension String {
         }
         
         return (escaped, characters)
+    }
+}
+
+public struct JSONArrayIterator: IteratorProtocol {
+    let array: JSONArray
+    
+    init(array: JSONArray) {
+        self.array = array
+        self.count = array.count
+    }
+    
+    let count: Int
+    var index = 0
+    
+    public mutating func next() -> JSONValue? {
+        guard index < count else { return nil }
+        return array[index]
     }
 }

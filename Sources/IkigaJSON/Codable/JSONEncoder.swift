@@ -1,6 +1,16 @@
 import Foundation
 import NIO
 
+#if os(Linux) && !swift(>=5.0)
+extension JSONEncoder {
+    public enum KeyEncodingStrategy {
+        case useDefaultKeys
+        case convertToSnakeCase
+        case custom(@escaping ([CodingKey]) -> CodingKey)
+    }
+}
+#endif
+
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings {
     public init() {}
