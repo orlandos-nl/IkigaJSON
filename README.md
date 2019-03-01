@@ -1,6 +1,6 @@
 # IkigaJSON
 
-IkigaJSON is a really fast JSON parser. It performed ~4x faster in our tests when decoding a type from JSON.
+IkigaJSON is a really fast JSON parser. It performed ~4x faster than Foundation in our tests when decoding a type from JSON.
 
 ### Adding the dependency
 
