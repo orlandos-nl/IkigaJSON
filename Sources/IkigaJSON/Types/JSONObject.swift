@@ -1,36 +1,73 @@
 import Foundation
 import NIO
 
-public struct JSONObject: ExpressibleByDictionaryLiteral {
+/// A JSON Dictionary, or collection whose elements are key-value pairs.
+///
+/// A JSONObject is always keyed by a String and only supports a predefined set of JSON Primitives for values.
+///
+/// Create a new dictionary by using a dictionary literal:
+///
+///     var user: JSONObject = [
+///         "username": "Joannis",
+///         "github": "https://github.com/Joannis",
+///         "creator": true
+///     ]
+///
+/// To create a JSONObject with no key-value pairs, use an empty dictionary literal (`[:]`)
+/// or use the empty initializer (`JSONObject()`)
+public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
+    /// The raw textual (JSON formatted) representation of this JSONObject
     public internal(set) var jsonBuffer: ByteBuffer
+    
+    /// An internal index that keeps track of all values within this JSONObject
     var description: JSONDescription
     
+    /// A textual (JSON formatted) representation of this JSONObject as `Foundation.Data`
     public var data: Data {
         return jsonBuffer.withUnsafeReadableBytes { buffer in
             return Data(buffer: buffer.bindMemory(to: UInt8.self))
         }
     }
     
+    /// A list of all top-level keys within this JSONObject
     public var keys: [String] {
         return jsonBuffer.withBytePointer { pointer in
             return self.description.keys(inPointer: pointer, unicode: true, convertingSnakeCasing: false)
         }
     }
     
+    /// A JSON formatted String with the contents of this JSONObject
     public var string: String! {
         return String(data: data, encoding: .utf8)
     }
     
+    /// Creates a new, empty JSONObject
     public init() {
         self.init(descriptionSize: 4_096)
     }
     
+    /// Parses the data as a JSON Object and configures this JSONObject to index and represent the JSON data
     public init(data: Data) throws {
         var buffer = allocator.buffer(capacity: data.count)
         buffer.write(bytes: data)
         try self.init(buffer: buffer)
     }
     
+    /// Parses the buffer as a JSON Object and configures this JSONObject to index and represent the JSON data
+    public init(buffer: ByteBuffer) throws {
+        self.jsonBuffer = buffer
+        
+        self.description = try buffer.withUnsafeReadableBytes { buffer in
+            let buffer = buffer.bindMemory(to: UInt8.self)
+            return try JSONParser.scanValue(fromPointer: buffer.baseAddress!, count: buffer.count)
+        }
+        
+        guard description.topLevelType == .object else {
+            throw JSONError.expectedObject
+        }
+    }
+    
+    /// An internal type that creates an empty JSONObject with a predefined expected description size
     private init(descriptionSize: Int) {
         self.jsonBuffer = allocator.buffer(capacity: 4_096)
         jsonBuffer.write(integer: UInt8.curlyLeft)
@@ -43,33 +80,29 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         
         self.description = description
     }
-
-    public init(buffer: ByteBuffer) throws {
-        self.jsonBuffer = buffer
-        
-        self.description = try buffer.withUnsafeReadableBytes { buffer in
-            let buffer = buffer.bindMemory(to: UInt8.self)
-            return try JSONParser.scanValue(fromPointer: buffer.baseAddress!, count: buffer.count)
-        }
-
-        guard description.topLevelType == .object else {
-            throw JSONError.expectedObject
-        }
-    }
     
+    /// Creates a new JSONObject from a dictionary literal.
+    ///
+    ///     var user: JSONObject = [
+    ///         "username": "Joannis",
+    ///         "github": "https://github.com/Joannis",
+    ///         "creator": true
+    ///     ]
     public init(dictionaryLiteral elements: (String, JSONValue)...) {
-        self.init(descriptionSize: 4096)
+        self.init(descriptionSize: Swift.max(4096, elements.count * 128))
         
         for (key, value) in elements {
             self[key] = value
         }
     }
     
+    /// Creates a new JSONObject from an already indexes JSON blob as an optimization for nested objects
     internal init(buffer: ByteBuffer, description: JSONDescription) {
         self.jsonBuffer = buffer
         self.description = description
     }
     
+    /// Removed a value at a specified index and json offset
     internal mutating func removeValue(index: Int, offset: Int) {
         let firstElement = index == 0
         let hasComma = description.arrayObjectCount() > 1
@@ -131,7 +164,8 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         description.removeObjectDescription(atKeyIndex: offset, jsonOffset: Int(keyBounds.offset), removedJSONLength: Int(bounds.length))
     }
     
-    private func value(forKey key: String, in json: UnsafePointer<UInt8>) -> JSONValue? {
+    /// Reads the JSONValue associated with the specified key
+    fileprivate func value(forKey key: String, in json: UnsafePointer<UInt8>) -> JSONValue? {
         guard let (_, offset) = description.valueOffset(forKey: key, convertingSnakeCasing: false, in: json) else {
             return nil
         }
@@ -168,6 +202,10 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         }
     }
     
+    /// Updates a key to a new value. If `nil` is provided, the value will be removed.
+    ///
+    /// If the key does not exist, `false` is returned. Otherwise `true` will be returned
+    @discardableResult
     public mutating func updateValue(_ newValue: JSONValue?, forKey key: String) -> Bool {
         let keyResult = jsonBuffer.withBytePointer { pointer in
             return description.keyOffset(forKey: key, convertingSnakeCasing: false, in: pointer)
@@ -189,6 +227,12 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
         return true
     }
 
+    /// Reads and writes the properties of this JSONObject by key.
+    ///
+    ///     var user = JSONObject()
+    ///     print(user["username"]) // `nil`
+    ///     user["username"] = "Joannis"
+    ///     print(user["username"]) // "Joannis"
     public subscript(key: String) -> JSONValue? {
         get {
             return jsonBuffer.withBytePointer { pointer in
@@ -283,5 +327,36 @@ public struct JSONObject: ExpressibleByDictionaryLiteral {
                 fatalError("Unsupported value \(newValue)")
             }
         }
+    }
+    
+    public func makeIterator() -> JSONObjectIterator {
+        return JSONObjectIterator(object: self)
+    }
+}
+
+public struct JSONObjectIterator: IteratorProtocol {
+    private let object: JSONObject
+    private let keys: [String]
+    private var index: Int
+    
+    init(object: JSONObject) {
+        self.object = object
+        self.keys = object.keys
+        self.index = 0
+    }
+    
+    public mutating func next() -> (String, JSONValue)? {
+        guard index < keys.count else { return nil }
+        defer { index += 1 }
+        let key = keys[index]
+        let value = object.jsonBuffer.withBytePointer { pointer in
+            return object.value(forKey: key, in: pointer)
+        }
+        
+        if let value = value {
+            return (key, value)
+        }
+        
+        return nil
     }
 }
