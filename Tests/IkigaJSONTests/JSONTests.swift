@@ -36,6 +36,55 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
     }
     
+    func testEncodeJSONObject() throws {
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        let test = Test(yes: "Hello", bug: "fly", awesome: [true], flag: "UK")
+        XCTAssertThrowsError(try newEncoder.encodeJSONArray(from: test))
+        
+        let object = try newEncoder.encodeJSONObject(from: test)
+        XCTAssertEqual(object["yes"].string, "Hello")
+        XCTAssertEqual(object["bug"].string, "fly")
+        XCTAssertEqual(object["awesome"].array?.count, 1)
+        XCTAssertEqual(object["awesome"].array?[0].bool, true)
+        XCTAssertEqual(object["flag"].string, "UK")
+    }
+    
+    func testEncodeJSONArray() throws {
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        let test = Test(yes: "Hello", bug: "fly", awesome: [true], flag: "UK")
+        let tests = [test, test, test]
+        
+        XCTAssertThrowsError(try newEncoder.encodeJSONObject(from: tests))
+        
+        let array = try newEncoder.encodeJSONArray(from: tests)
+        XCTAssertEqual(array.count, 3)
+        
+        for object in array {
+            guard let object = object.object else {
+                XCTFail("Not an object")
+                return
+            }
+            
+            XCTAssertEqual(object["yes"].string, "Hello")
+            XCTAssertEqual(object["bug"].string, "fly")
+            XCTAssertEqual(object["awesome"].array?.count, 1)
+            XCTAssertEqual(object["awesome"].array?[0].bool, true)
+            XCTAssertEqual(object["flag"].string, "UK")
+        }
+    }
+    
     func testDecodeJSONObject() throws {
         struct Test: Codable {
             let yes: String

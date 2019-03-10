@@ -282,6 +282,7 @@ public struct JSONArrayIterator: IteratorProtocol {
     
     public mutating func next() -> JSONValue? {
         guard index < count else { return nil }
+        defer { index = index &+ 1 }
         return array[index]
     }
 }

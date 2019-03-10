@@ -159,6 +159,22 @@ public struct IkigaJSONEncoder {
         let data = UnsafeRawBufferPointer(start: encoder.data.pointer, count: encoder.offset)
         buffer.write(bytes: data)
     }
+    
+    public func encodeJSONObject<E: Encodable>(from value: E) throws -> JSONObject {
+        let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
+        try value.encode(to: encoder)
+        encoder.writeEnd()
+        let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
+        return try JSONObject(data: data)
+    }
+    
+    public func encodeJSONArray<E: Encodable>(from value: E) throws -> JSONArray {
+        let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
+        try value.encode(to: encoder)
+        encoder.writeEnd()
+        let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
+        return try JSONArray(data: data)
+    }
 }
 
 internal let nullBytes: StaticString = "null"
