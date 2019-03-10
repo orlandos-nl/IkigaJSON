@@ -36,6 +36,59 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
     }
     
+    func testDecodeJSONObject() throws {
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        let jsonObject: JSONObject = [
+            "yes": "true",
+            "bug": "🐛",
+            "awesome": [true, false, false] as JSONArray,
+            "flag": "NL"
+        ]
+        
+        let test = try newParser.decode(Test.self, from: jsonObject)
+        
+        XCTAssertEqual(test.yes, "true")
+        XCTAssertEqual(test.bug, "🐛")
+        XCTAssertEqual(test.awesome, [true, false, false])
+        XCTAssertEqual(test.flag, "NL")
+    }
+    
+    func testDecodeJSONArray() throws {
+        struct Test: Codable {
+            let yes: String
+            let bug: String
+            let awesome: [Bool]
+            let flag: String
+        }
+        
+        let jsonObject: JSONObject = [
+            "yes": "true",
+            "bug": "🐛",
+            "awesome": [true, false, false] as JSONArray,
+            "flag": "NL"
+        ]
+        
+        let jsonArray: JSONArray = [
+            jsonObject, jsonObject, jsonObject
+        ]
+        
+        let tests = try newParser.decode([Test].self, from: jsonArray)
+        XCTAssertEqual(tests.count, 3)
+        
+        for test in tests {
+            XCTAssertEqual(test.yes, "true")
+            XCTAssertEqual(test.bug, "🐛")
+            XCTAssertEqual(test.awesome, [true, false, false])
+            XCTAssertEqual(test.flag, "NL")
+        }
+    }
+    
     func testMissingCommaInArray() {
         let json = """
         {

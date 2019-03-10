@@ -98,6 +98,32 @@ public final class IkigaJSONDecoder {
         }
     }
     
+    /// Parses the Decodable type from a JSONObject.
+    public func decode<D: Decodable>(_ type: D.Type, from object: JSONObject) throws -> D {
+        return try object.jsonBuffer.withUnsafeReadableBytes { buffer in
+            let decoder = _JSONDecoder(
+                description: object.description,
+                pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
+                settings: settings
+            )
+            
+            return try D(from: decoder)
+        }
+    }
+    
+    /// Parses the Decodable type from a JSONArray.
+    public func decode<D: Decodable>(_ type: D.Type, from array: JSONArray) throws -> D {
+        return try array.jsonBuffer.withUnsafeReadableBytes { buffer in
+            let decoder = _JSONDecoder(
+                description: array.description,
+                pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
+                settings: settings
+            )
+            
+            return try D(from: decoder)
+        }
+    }
+    
     /// Parses the Decodable type from a SwiftNIO `ByteBuffer`.
     public func decode<D: Decodable>(_ type: D.Type, from byteBuffer: ByteBuffer) throws -> D {
         return try byteBuffer.withUnsafeReadableBytes { buffer in

@@ -13,7 +13,7 @@ SPM:
 Cocoapods:
 
 ```swift
-pod 'IkigaJSON', '~> 1.1'
+pod 'IkigaJSON', '>= 1.1'
 ```
 
 ### Usage
@@ -42,6 +42,10 @@ user["roles"] = ["admin", "moderator", "user"] as JSONArray
 user["programmer"] = true
 
 print(user.string)
+
+print(user["username"].string)
+// OR
+print(user["username"] as? String)
 ```
 
 ### SwiftNIO support
