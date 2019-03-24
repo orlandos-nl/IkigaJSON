@@ -246,6 +246,37 @@ fileprivate final class _JSONEncoder: Encoder {
         let number = String(value)
         data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
     }
+
+    // Returns `true` if it was handled, false if it needs to be deferred
+    func writeDate(_ date: Date) throws -> Bool {
+        switch settings.dateEncodingStrategy {
+        case .deferredToDate:
+            return false
+        case .secondsSince1970:
+            writeValue(date.timeIntervalSince1970)
+        case .millisecondsSince1970:
+            writeValue(date.timeIntervalSince1970 * 1000)
+        case .iso8601:
+            let string: String
+
+            if #available(OSX 10.12, iOS 11, *) {
+                string = isoFormatter.string(from: date)
+            } else {
+                string = isoDateFormatter.string(from: date)
+            }
+
+            writeValue(string)
+        case .formatted(let formatter):
+            let string = formatter.string(from: date)
+            writeValue(string)
+        case .custom(let custom):
+            let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings)
+            encoder.superEncoder = self
+            try custom(date, encoder)
+        }
+
+        return true
+    }
     
     func writeComma() {
         if didWriteValue {
@@ -514,39 +545,16 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
-        valueSwitch: switch value {
+        self.encoder.writeKey(key.stringValue)
+
+        switch value {
         case let date as Date:
-            switch encoder.settings.dateEncodingStrategy {
-            case .deferredToDate:
-                break valueSwitch
-            case .secondsSince1970:
-                try encode(date.timeIntervalSince1970, forKey: key)
-            case .millisecondsSince1970:
-                try encode(date.timeIntervalSince1970 * 1000, forKey: key)
-            case .iso8601:
-                let string: String
-
-                if #available(OSX 10.12, iOS 11, *) {
-                    string = isoFormatter.string(from: date)
-                } else {
-                    string = isoDateFormatter.string(from: date)
-                }
-
-                try encode(string, forKey: key)
-            case .formatted(let formatter):
-                let string = formatter.string(from: date)
-                try encode(string, forKey: key)
-            case .custom(let custom):
-                self.encoder.writeKey(key.stringValue)
-                let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-                encoder.superEncoder = self.encoder
-                try custom(date, encoder)
+            if try encoder.writeDate(date) {
+                return
             }
-            return
         default: break
         }
 
-        self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         try value.encode(to: encoder)
@@ -700,6 +708,14 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
     }
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
+        switch value {
+        case let date as Date:
+            if try encoder.writeDate(date) {
+                return
+            }
+        default: break
+        }
+        
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         try value.encode(to: encoder)
@@ -866,6 +882,15 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         encoder.writeComma()
+
+        switch value {
+        case let date as Date:
+            if try encoder.writeDate(date) {
+                return
+            }
+        default: break
+        }
+
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         try value.encode(to: encoder)

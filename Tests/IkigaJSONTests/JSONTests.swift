@@ -789,6 +789,47 @@ final class IkigaJSONTests: XCTestCase {
     }
 
     @available(OSX 10.12, *)
+    func testArrayDateEncoding() throws {
+        struct Dates: Codable {
+            var dates = [Date()]
+        }
+
+        var encoder = IkigaJSONEncoder()
+        let instance = Dates()
+
+        encoder.settings.dateEncodingStrategy = .iso8601
+        let iso = ISO8601DateFormatter().string(from: instance.dates[0])
+        var json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["dates"].array?[0].string, iso)
+
+        encoder.settings.dateEncodingStrategy = .deferredToDate
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSinceReferenceDate)
+
+        encoder.settings.dateEncodingStrategy = .secondsSince1970
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSince1970)
+
+        encoder.settings.dateEncodingStrategy = .millisecondsSince1970
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSince1970 * 1000)
+
+        encoder.settings.dateEncodingStrategy = .custom({ date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(true)
+        })
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["dates"].array?[0].bool, true)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "YYYY"
+        encoder.settings.dateEncodingStrategy = .formatted(formatter)
+        json = try encoder.encodeJSONObject(from: instance)
+        let result = formatter.string(from: instance.dates[0])
+        XCTAssertEqual(json["dates"].array?[0].string, result)
+    }
+
+    @available(OSX 10.12, *)
     func testDateEncoding() throws {
         struct DateTest: Codable {
             let date = Date()
