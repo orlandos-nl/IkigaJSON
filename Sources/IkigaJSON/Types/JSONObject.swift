@@ -194,7 +194,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
         case .stringWithEscaping:
             return description.dataBounds(atIndexOffset: offset).makeString(from: json, escaping: true, unicode: true)
         case .integer:
-            return description.dataBounds(atIndexOffset: offset).makeDouble(from: json, floating: false)
+            return description.dataBounds(atIndexOffset: offset).makeInt(from: json)
         case .floatingNumber:
             return description.dataBounds(atIndexOffset: offset).makeDouble(from: json, floating: true)
         case .null:

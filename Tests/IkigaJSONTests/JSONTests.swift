@@ -54,6 +54,152 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(object["awesome"].array?[0].bool, true)
         XCTAssertEqual(object["flag"].string, "UK")
     }
+
+    func testEncodeNil() throws {
+        struct Test: Codable {
+            let yes: Int?
+        }
+
+        let value = Test(yes: 3)
+        let noValue = Test(yes: nil)
+
+        var encoder = IkigaJSONEncoder()
+        var object = try encoder.encodeJSONObject(from: value)
+        XCTAssertEqual(object["yes"].int, 3)
+
+        object = try encoder.encodeJSONObject(from: noValue)
+        XCTAssertFalse(object["yes"] is NSNull)
+        XCTAssertFalse(object.keys.contains("yes"))
+
+        encoder.settings.encodeNilAsNull = true
+
+        object = try encoder.encodeJSONObject(from: noValue)
+        XCTAssert(object["yes"] is NSNull)
+        XCTAssert(object.keys.contains("yes"))
+    }
+
+    func testAllEncoding() throws {
+        struct AllPrimitives: Codable {
+            var s: String
+            var f: Float
+            var d: Double
+            var b: Bool
+            var b2: Bool
+            var i: Int
+            var i8: Int8
+            var i16: Int16
+            var i32: Int32
+            var i64: Int64
+            var u: UInt
+            var u8: UInt8
+            var u16: UInt16
+            var u32: UInt32
+            var u64: UInt64
+
+            var os: String?
+            var of: Float?
+            var od: Double?
+            var ob: Bool?
+            var ob2: Bool?
+            var oi: Int?
+            var oi8: Int8?
+            var oi16: Int16?
+            var oi32: Int32?
+            var oi64: Int64?
+            var ou: UInt?
+            var ou8: UInt8?
+            var ou16: UInt16?
+            var ou32: UInt32?
+            var ou64: UInt64?
+        }
+
+        struct Test: Codable {
+            var a: [AllPrimitives]
+            var p: AllPrimitives
+            var d: [String: AllPrimitives]
+        }
+
+        let primitives = AllPrimitives(s: "s", f: 3.1, d: 4.2, b: true, b2: false, i: 5, i8: 89, i16: -7667, i32: -889, i64: 123123213, u: 0x54, u8: 213, u16: 51, u32: 231, u64: 513, os: nil, of: nil, od: nil, ob: nil, ob2: nil, oi: nil, oi8: nil, oi16: nil, oi32: nil, oi64: nil, ou: nil, ou8: nil, ou16: nil, ou32: nil, ou64: nil)
+        let primitives2 = AllPrimitives(s: "s", f: 3.1, d: 4.2, b: true, b2: false, i: 5, i8: 89, i16: -7667, i32: -889, i64: 123123213, u: 0x54, u8: 213, u16: 51, u32: 231, u64: 513, os: "s", of: 3.1, od: 4.2, ob: true, ob2: false, oi: -123, oi8: 12, oi16: -611, oi32: 1231512, oi64: 62341, ou: 3152113, ou8: 51, ou16: 314, ou32: 21321, ou64: 15334123441)
+
+        let test = Test(a: [primitives, primitives2], p: primitives, d: ["a": primitives, "b": primitives2])
+
+        func objectNil() throws {
+            func testFirst(against object: JSONObject?) {
+                guard let object = object else {
+                    XCTFail()
+                    return
+                }
+
+                XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64"])
+            }
+
+            func testSecond(against object: JSONObject?) {
+                guard let object = object else {
+                    XCTFail()
+                    return
+                }
+
+                XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
+            }
+
+            var encoder = IkigaJSONEncoder()
+            encoder.settings.encodeNilAsNull = false
+            var object = try encoder.encodeJSONObject(from: test)
+
+            XCTAssertEqual(object.keys, ["a", "p", "d"])
+
+            testFirst(against: object["a"].array?[0].object)
+            testFirst(against: object["p"].object)
+            testFirst(against: object["d"].object?["a"]?.object)
+
+            testSecond(against: object["a"].array?[1].object)
+            testSecond(against: object["d"].object?["b"]?.object)
+        }
+
+        func objectNull() throws {
+            func testFirst(against object: JSONObject?) {
+                guard let object = object else {
+                    XCTFail()
+                    return
+                }
+
+                XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
+            }
+
+            func testSecond(against object: JSONObject?) {
+                guard let object = object else {
+                    XCTFail()
+                    return
+                }
+
+                XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
+            }
+
+            var encoder = IkigaJSONEncoder()
+            encoder.settings.encodeNilAsNull = true
+            var object = try encoder.encodeJSONObject(from: test)
+
+            XCTAssertEqual(object.keys, ["a", "p", "d"])
+
+            testFirst(against: object["a"].array?[0].object)
+            testFirst(against: object["p"].object)
+            testFirst(against: object["d"].object?["a"]?.object)
+
+            testSecond(against: object["a"].array?[1].object)
+            testSecond(against: object["d"].object?["b"]?.object)
+        }
+    }
+
+    func testEncodeInt() throws {
+        struct Test: Codable {
+            let yes: Int
+        }
+
+        let value = Test(yes: 3)
+        let object = try IkigaJSONEncoder().encodeJSONObject(from: value)
+        XCTAssertEqual(object["yes"].int, 3)
+    }
     
     func testEncodeJSONArray() throws {
         struct Test: Codable {
@@ -327,96 +473,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(test.bug, "🐛")
         XCTAssertEqual(test.flag, "🇳🇱")
     }
-    
-//    func testJSONObject() throws {
-//        let json = """
-//        {
-//            "id": "0",
-//            "username": "Joannis",
-//            "role": "admin",
-//            "awesome": true,
-//            "superAwesome": false
-//        }
-//        """.data(using: .utf8)!
-//
-//        let object = try JSONObject(data: json)
-//        XCTAssertEqual(object["id"].string, "0")
-//        XCTAssertEqual(object["username"].string, "Joannis")
-//        XCTAssertEqual(object["role"].string, "admin")
-//        XCTAssertEqual(object["awesome"].bool, true)
-//        XCTAssertEqual(object["superAwesome"].bool, false)
-//
-//        XCTAssertNil(object["ID"])
-//        XCTAssertNil(object["user_name"])
-//        XCTAssertNil(object["test"])
-//    }
-//
-//    func testJSONArray() throws {
-//        let json = """
-//        [0,1,2,true,"false"]
-//        """.data(using: .utf8)!
-//
-//        let array = try JSONArray(data: json)
-//        XCTAssertEqual(array[0].int, 0)
-//        XCTAssertEqual(array[1].int, 1)
-//        XCTAssertEqual(array[2].int, 2)
-//        XCTAssertEqual(array[3].bool, true)
-//        XCTAssertEqual(array[4].string, "false")
-//
-//        XCTAssertNil(array[4].bool)
-//    }
-//
-//    func testNestedJSONObject() throws {
-//        let json = """
-//        {
-//            "id": "0",
-//            "username": "Joannis",
-//            "roles": ["admin", "user"],
-//            "awesome": true,
-//            "details": {
-//                "pet": "Noodles"
-//            },
-//            "superAwesome": false
-//        }
-//        """.data(using: .utf8)!
-//
-//        let object = try JSONObject(data: json)
-//        XCTAssertEqual(object["id"].string, "0")
-//        XCTAssertEqual(object["username"].string, "Joannis")
-//        XCTAssertEqual(object["roles"][0].string, "admin")
-//        XCTAssertEqual(object["roles"][1].string, "user")
-//        XCTAssertEqual(object["details"]["pet"].string, "Noodles")
-//        XCTAssertEqual(object["awesome"].bool, true)
-//        XCTAssertEqual(object["superAwesome"].bool, false)
-//
-//        XCTAssertNil(object["ID"])
-//        XCTAssertNil(object["user_name"])
-//        XCTAssertNil(object["test"])
-//        XCTAssertNil(object["roles"]["admin"])
-//        XCTAssertNil(object["roles"]["details"]["hoi"])
-//        XCTAssertNil(object["roles"]["details"][5])
-//        XCTAssertNil(object["roles"]["details"][0])
-//    }
-//
-//    func testNestedJSONArray() throws {
-//        let json = """
-//        [0,1,[1,true,true,"hoi"],{"name":"Klaas"},"false"]
-//        """.data(using: .utf8)!
-//
-//        let array = try JSONArray(data: json)
-//        XCTAssertEqual(array[0].int, 0)
-//        XCTAssertEqual(array[1].int, 1)
-//        XCTAssertNotNil(array[2].array)
-//        XCTAssertEqual(array[2][0].int, 1)
-//        XCTAssertEqual(array[2][1].bool, true)
-//        XCTAssertEqual(array[2][2].bool, true)
-//        XCTAssertEqual(array[2][3].string, "hoi")
-//        XCTAssertEqual(array[3]["name"].string, "Klaas")
-//        XCTAssertEqual(array[4].string, "false")
-//
-//        XCTAssertNil(array[4].bool)
-//        XCTAssertNil(array[3]["henk"])
-//    }
     
     func testObject() throws {
         let json = """
@@ -692,7 +748,7 @@ final class IkigaJSONTests: XCTestCase {
         object["key"] = nil
 
         object["key"] = 5
-        XCTAssertEqual(object["key"] as? Double, 5)
+        XCTAssertEqual(object["key"] as? Int, 5)
         object["key"] = nil
 
         object["key"] = "Hello, world"
