@@ -514,6 +514,38 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
+        valueSwitch: switch value {
+        case let date as Date:
+            switch encoder.settings.dateEncodingStrategy {
+            case .deferredToDate:
+                break valueSwitch
+            case .secondsSince1970:
+                try encode(date.timeIntervalSince1970, forKey: key)
+            case .millisecondsSince1970:
+                try encode(date.timeIntervalSince1970 * 1000, forKey: key)
+            case .iso8601:
+                let string: String
+
+                if #available(OSX 10.12, iOS 11, *) {
+                    string = isoFormatter.string(from: date)
+                } else {
+                    string = isoDateFormatter.string(from: date)
+                }
+
+                try encode(string, forKey: key)
+            case .formatted(let formatter):
+                let string = formatter.string(from: date)
+                try encode(string, forKey: key)
+            case .custom(let custom):
+                self.encoder.writeKey(key.stringValue)
+                let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
+                encoder.superEncoder = self.encoder
+                try custom(date, encoder)
+            }
+            return
+        default: break
+        }
+
         self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder

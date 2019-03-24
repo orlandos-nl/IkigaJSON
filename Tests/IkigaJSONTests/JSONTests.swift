@@ -788,6 +788,47 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(Test.self, from: object))
     }
 
+    @available(OSX 10.12, *)
+    func testDateEncoding() throws {
+        struct DateTest: Codable {
+            let date = Date()
+        }
+
+        var encoder = IkigaJSONEncoder()
+        let instance = DateTest()
+
+        encoder.settings.dateEncodingStrategy = .iso8601
+        let iso = ISO8601DateFormatter().string(from: instance.date)
+        var json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["date"].string, iso)
+
+        encoder.settings.dateEncodingStrategy = .deferredToDate
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["date"].double, instance.date.timeIntervalSinceReferenceDate)
+
+        encoder.settings.dateEncodingStrategy = .secondsSince1970
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["date"].double, instance.date.timeIntervalSince1970)
+
+        encoder.settings.dateEncodingStrategy = .millisecondsSince1970
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["date"].double, instance.date.timeIntervalSince1970 * 1000)
+
+        encoder.settings.dateEncodingStrategy = .custom({ date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(true)
+        })
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["date"].bool, true)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "YYYY"
+        encoder.settings.dateEncodingStrategy = .formatted(formatter)
+        json = try encoder.encodeJSONObject(from: instance)
+        let result = formatter.string(from: instance.date)
+        XCTAssertEqual(json["date"].string, result)
+    }
+
     func testNestedObjectInObjectAccess() {
         var profile: JSONObject = [
             "username": "Joannis"

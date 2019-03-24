@@ -3,7 +3,7 @@ import NIO
 
 @available(OSX 10.12, *)
 let isoFormatter = ISO8601DateFormatter()
-let dateFormatter: DateFormatter = {
+let isoDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
     return formatter
@@ -27,7 +27,7 @@ func date(from string: String) throws -> Date {
         
         return date
     } else {
-        guard let date = dateFormatter.date(from: string) else {
+        guard let date = isoDateFormatter.date(from: string) else {
             throw JSONError.invalidDate(string)
         }
         
