@@ -788,6 +788,61 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(Test.self, from: object))
     }
 
+    func testDataEncoding() throws {
+        struct Datas: Codable {
+            var data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
+        }
+
+        var encoder = IkigaJSONEncoder()
+        let instance = Datas()
+
+        encoder.settings.dataEncodingStrategy = .deferredToData
+        var json = try encoder.encodeJSONObject(from: instance)
+        if let bytes = json["data"] {
+            XCTAssertEqual(bytes[0].int, 1)
+            XCTAssertEqual(bytes[1].int, 2)
+            XCTAssertEqual(bytes[2].int, 3)
+            XCTAssertEqual(bytes[3].int, 4)
+            XCTAssertEqual(bytes[4].int, 5)
+        } else {
+            XCTFail()
+        }
+
+        encoder.settings.dataEncodingStrategy = .base64
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["data"].string, instance.data.base64EncodedString())
+
+        encoder.settings.dataEncodingStrategy = .custom({ _, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(true)
+        })
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["data"].bool, true)
+    }
+
+    func testDataDecoding() throws {
+        struct Datas: Codable {
+            let data: Data
+        }
+
+        let decoder = IkigaJSONDecoder()
+
+        decoder.settings.dataDecodingStrategy = .deferredToData
+        var datas = try decoder.decode(Datas.self, from: "{\"data\":[1,2,3]}")
+        XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
+
+        decoder.settings.dataDecodingStrategy = .custom({ _ in
+            return Data(bytes: [1, 2, 3])
+        })
+        datas = try decoder.decode(Datas.self, from: "{\"data\":true}")
+        XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
+
+        let data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
+        decoder.settings.dataDecodingStrategy = .base64
+        datas = try decoder.decode(Datas.self, from: "{\"data\":\"\(data.base64EncodedString())\"}")
+        XCTAssertEqual(datas.data, data)
+    }
+
     func testArrayDataEncoding() throws {
         struct Datas: Codable {
             var datas = [Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])]
