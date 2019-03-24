@@ -788,6 +788,38 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(Test.self, from: object))
     }
 
+    func testArrayDataEncoding() throws {
+        struct Datas: Codable {
+            var datas = [Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])]
+        }
+
+        var encoder = IkigaJSONEncoder()
+        let instance = Datas()
+
+        encoder.settings.dataEncodingStrategy = .deferredToData
+        var json = try encoder.encodeJSONObject(from: instance)
+        if let bytes = json["datas"].array?[0].array {
+            XCTAssertEqual(bytes[0].int, 1)
+            XCTAssertEqual(bytes[1].int, 2)
+            XCTAssertEqual(bytes[2].int, 3)
+            XCTAssertEqual(bytes[3].int, 4)
+            XCTAssertEqual(bytes[4].int, 5)
+        } else {
+            XCTFail()
+        }
+
+        encoder.settings.dataEncodingStrategy = .base64
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["datas"].array?[0].string, instance.datas[0].base64EncodedString())
+
+        encoder.settings.dataEncodingStrategy = .custom({ _, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(true)
+        })
+        json = try encoder.encodeJSONObject(from: instance)
+        XCTAssertEqual(json["datas"].array?[0].bool, true)
+    }
+
     @available(OSX 10.12, *)
     func testArrayDateEncoding() throws {
         struct Dates: Codable {
@@ -814,7 +846,7 @@ final class IkigaJSONTests: XCTestCase {
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSince1970 * 1000)
 
-        encoder.settings.dateEncodingStrategy = .custom({ date, encoder in
+        encoder.settings.dateEncodingStrategy = .custom({ _, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(true)
         })

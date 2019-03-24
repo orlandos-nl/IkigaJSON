@@ -95,7 +95,7 @@ extension JSONDescription {
         
         while indexOffset < buffer.writerIndex {
             self.buffer.advance(at: indexOffset + Constants.jsonLocationOffset, by: jsonOffset)
-            skipIndex(atOffset: &indexOffset)
+            indexOffset = indexOffset &+ type(atOffset: indexOffset).indexLength
         }
     }
     
@@ -122,7 +122,7 @@ extension JSONDescription {
         
         return type
     }
-    
+
     func indexLength(atOffset offset: Int) -> Int {
         // Force unwrap because this is all internal code, if this crashes JSON is broken
         switch type(atOffset: offset) {
@@ -751,4 +751,15 @@ enum JSONType: UInt8 {
     case integer = 0x07
     case floatingNumber = 0x08
     case null = 0x09
+
+    var indexLength: Int {
+        switch self {
+        case .object, .array:
+            return Constants.arrayObjectIndexLength
+        case .boolTrue, .boolFalse, .null:
+            return Constants.boolNullIndexLength
+        case .integer, .floatingNumber, .string, .stringWithEscaping:
+            return Constants.stringNumberIndexLength
+        }
+    }
 }
