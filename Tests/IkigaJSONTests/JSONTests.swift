@@ -773,6 +773,21 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(object.string, "{}")
     }
 
+    func testInvalidJSONCase() {
+        let object = """
+        {
+            "hoi" "",
+        }
+        """
+
+        struct Test: Codable {
+            var hoi: String
+        }
+
+        let decoder = IkigaJSONDecoder()
+        XCTAssertThrowsError(try decoder.decode(Test.self, from: object))
+    }
+
     func testNestedObjectInObjectAccess() {
         var profile: JSONObject = [
             "username": "Joannis"
