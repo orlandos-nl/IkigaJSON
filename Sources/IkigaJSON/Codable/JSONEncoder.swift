@@ -514,7 +514,6 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
-        print(value)
         self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
@@ -669,7 +668,6 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
     }
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
-        print(value)
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         try value.encode(to: encoder)
