@@ -566,7 +566,7 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
         self.encoder.writeKey(key.stringValue)
 
-        if try encoder.writeOtherValue(value) {
+        if try self.encoder.writeOtherValue(value) {
             return
         }
 
@@ -723,7 +723,7 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
     }
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
-        if try encoder.writeOtherValue(value) {
+        if try self.encoder.writeOtherValue(value) {
             return
         }
         
@@ -892,9 +892,9 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     }
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
-        encoder.writeComma()
+        self.encoder.writeComma()
 
-        if try encoder.writeOtherValue(value) {
+        if try self.encoder.writeOtherValue(value) {
             return
         }
 
@@ -904,14 +904,14 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
-        encoder.writeComma()
+        self.encoder.writeComma()
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
-        encoder.writeComma()
+        self.encoder.writeComma()
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
         encoder.superEncoder = self.encoder
         return encoder.unkeyedContainer()
