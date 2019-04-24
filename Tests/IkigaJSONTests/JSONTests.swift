@@ -78,6 +78,58 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssert(object.keys.contains("yes"))
     }
 
+    private func measureTime(run block: () throws -> ()) rethrows -> TimeInterval {
+        let date = Date()
+        try block()
+        return Date().timeIntervalSince(date)
+    }
+
+    func testArrayEncodingPerformance() throws {
+        var ikiga = IkigaJSONEncoder()
+        ikiga.settings.bufferExpansionMode = .normal
+        ikiga.settings.expectedJSONSize = 2_000_000
+        let foundation = JSONEncoder()
+
+        let string = "Hello, world"
+
+        let array = [String](repeating: string, count: 100_000)
+
+        let ikigaPerformance = try measureTime {
+            _ = try ikiga.encode(array)
+        }
+
+        let foundationPerformance = try measureTime {
+            _ = try foundation.encode(array)
+        }
+
+        XCTAssertLessThan(ikigaPerformance, foundationPerformance)
+    }
+
+    func testObjectEncodingPerformance() throws {
+        var ikiga = IkigaJSONEncoder()
+        ikiga.settings.bufferExpansionMode = .normal
+        ikiga.settings.expectedJSONSize = 2_000_000
+        let foundation = JSONEncoder()
+
+        let string = "Hello, world"
+
+        var dictionary = [String: String]()
+
+        for i in 0..<100_000 {
+            dictionary[String(i)] = string
+        }
+
+        let ikigaPerformance = try measureTime {
+            _ = try ikiga.encode(dictionary)
+        }
+
+        let foundationPerformance = try measureTime {
+            _ = try foundation.encode(dictionary)
+        }
+
+        XCTAssertLessThan(ikigaPerformance, foundationPerformance)
+    }
+
     func testAllEncoding() throws {
         struct AllPrimitives: Codable {
             var s: String

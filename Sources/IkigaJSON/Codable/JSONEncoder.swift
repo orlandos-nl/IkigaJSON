@@ -14,6 +14,11 @@ extension JSONEncoder {
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings {
     public init() {}
+
+    /// The manner of expanding internal buffers for growing encoding demands
+    public var bufferExpansionMode = ExpansionMode.normal
+
+    public var expectedJSONSize = 16_384
     
     /// This userInfo is accessible by the Eecodable types that are being encoded
     public var userInfo = [CodingUserInfoKey : Any]()
@@ -63,28 +68,44 @@ public struct JSONEncoderSettings {
     }
 }
 
+/// The manner of expanding internal buffers for growing encoding demands
+public enum ExpansionMode {
+    /// For limited RAM environments
+    case smallest
+
+    /// For small datasets
+    case small
+
+    /// Normal use cases
+    case normal
+
+    /// For large datsets
+    case eager
+}
+
 /// A type that automatically deallocated the pointer and can be expanded manually or automatically.
 ///
 /// Has a few helpers for writing binary data. Mainly/only used for the JSONDescription.
 final class AutoDeallocatingPointer {
     var pointer: UnsafeMutablePointer<UInt8>
     private(set) var totalSize: Int
+    let expansionMode: ExpansionMode
+    let expectedSize: Int
+    var offset = 0
     
-    init(size: Int) {
-        self.pointer = .allocate(capacity: size)
-        totalSize = size
+    init(expectedSize: Int, expansionMode: ExpansionMode) {
+        self.pointer = .allocate(capacity: expectedSize)
+        self.expansionMode = expansionMode
+        self.totalSize = expectedSize
+        self.expectedSize = expectedSize
     }
     
     /// Expands the buffer to it's new absolute size and copies the usedCapacity to the new buffer.
     ///
     /// Any data after the userCapacity is lost
     func expand(to count: Int, usedCapacity size: Int) {
-        let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-        new.assign(from: pointer, count: size)
-        pointer.deallocate()
-        
         self.totalSize = count
-        self.pointer = new
+        self.pointer = realloc(pointer, size)!.assumingMemoryBound(to: UInt8.self)
     }
     
     /// Expects `offset + count` bytes in this buffer, if this buffer is too small it's expanded
@@ -92,8 +113,19 @@ final class AutoDeallocatingPointer {
         let needed = (offset &+ count) &- totalSize
         
         if needed > 0 {
-            // A fat fingered number that will usually be efficient
-            let newSize = offset &+ max(count, 4096)
+            let newSize: Int
+
+            switch expansionMode {
+            case .eager:
+                newSize = max(totalSize &* 2, offset &+ count)
+            case .normal:
+                newSize = offset &+ max(count, expectedSize)
+            case .small:
+                newSize = offset &+ max(count, 4096)
+            case .smallest:
+                newSize = offset &+ count
+            }
+
             expand(to: newSize, usedCapacity: offset)
         }
     }
@@ -129,7 +161,7 @@ final class AutoDeallocatingPointer {
     
     deinit {
         /// The magic of this class, automatically deallocating thanks to ARC
-        pointer.deallocate()
+        free(pointer)
     }
 }
 
@@ -181,10 +213,16 @@ internal let boolFalse: StaticString = "false"
 
 fileprivate final class _JSONEncoder: Encoder {
     var codingPath: [CodingKey]
-    let data = AutoDeallocatingPointer(size: 512)
-    private(set) var offset = 0
+    let data: AutoDeallocatingPointer
+    private(set) var offset: Int {
+        get {
+            return data.offset
+        }
+        set {
+            data.offset = newValue
+        }
+    }
     var end: UInt8?
-    var superEncoder: _JSONEncoder?
     var didWriteValue = false
     var userInfo: [CodingUserInfoKey : Any]
     var settings: JSONEncoderSettings
@@ -195,11 +233,19 @@ fileprivate final class _JSONEncoder: Encoder {
             self.end = nil
         }
     }
-    
-    init(codingPath: [CodingKey] = [], userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings) {
+
+    init(codingPath: [CodingKey], userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings, data: AutoDeallocatingPointer) {
         self.codingPath = codingPath
         self.userInfo = userInfo
         self.settings = settings
+        self.data = data
+    }
+    
+    init(userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings) {
+        self.codingPath = []
+        self.userInfo = userInfo
+        self.settings = settings
+        data = AutoDeallocatingPointer(expectedSize: settings.expectedJSONSize, expansionMode: settings.bufferExpansionMode)
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
@@ -272,8 +318,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = formatter.string(from: date)
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings)
-                encoder.superEncoder = self
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings, data: self.data)
                 try custom(date, encoder)
             }
 
@@ -286,8 +331,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = data.base64EncodedString()
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings)
-                encoder.superEncoder = self
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings, data: self.data)
                 try custom(data, encoder)
             }
 
@@ -432,10 +476,10 @@ fileprivate final class _JSONEncoder: Encoder {
         if let end = end {
             data.insert(end, at: &offset)
         }
-        
-        if let superEncoder = superEncoder {
-            superEncoder.data.insert(contentsOf: self.data, count: self.offset, at: &superEncoder.offset)
-        }
+//
+//        if let superEncoder = superEncoder {
+//            superEncoder.data.insert(contentsOf: self.data, count: self.offset, at: &superEncoder.offset)
+//        }
     }
 }
 
@@ -570,22 +614,19 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         try value.encode(to: encoder)
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         return encoder.unkeyedContainer()
     }
     
@@ -727,8 +768,7 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
             return
         }
         
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         try value.encode(to: encoder)
     }
 }
@@ -898,22 +938,19 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         try value.encode(to: encoder)
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings)
-        encoder.superEncoder = self.encoder
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
         return encoder.unkeyedContainer()
     }
     
