@@ -104,8 +104,11 @@ final class AutoDeallocatingPointer {
     ///
     /// Any data after the userCapacity is lost
     func expand(to count: Int, usedCapacity size: Int) {
-        self.totalSize = count
-        self.pointer = realloc(pointer, size)!.assumingMemoryBound(to: UInt8.self)
+        let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        new.assign(from: pointer, count: size)
+        pointer.deallocate()
+        totalSize = count
+        self.pointer = new
     }
     
     /// Expects `offset + count` bytes in this buffer, if this buffer is too small it's expanded
@@ -161,7 +164,7 @@ final class AutoDeallocatingPointer {
     
     deinit {
         /// The magic of this class, automatically deallocating thanks to ARC
-        free(pointer)
+        pointer.deallocate()
     }
 }
 

@@ -86,23 +86,21 @@ final class IkigaJSONTests: XCTestCase {
 
     func testArrayEncodingPerformance() throws {
         var ikiga = IkigaJSONEncoder()
-        ikiga.settings.bufferExpansionMode = .normal
-        ikiga.settings.expectedJSONSize = 2_000_000
         let foundation = JSONEncoder()
 
         let string = "Hello, world"
 
         let array = [String](repeating: string, count: 100_000)
 
-        let ikigaPerformance = try measureTime {
+        let ikigaTimeSpent = try measureTime {
             _ = try ikiga.encode(array)
         }
 
-        let foundationPerformance = try measureTime {
+        let foundationTimeSpent = try measureTime {
             _ = try foundation.encode(array)
         }
 
-        XCTAssertLessThan(ikigaPerformance, foundationPerformance)
+        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
     }
 
     func testObjectEncodingPerformance() throws {
@@ -119,15 +117,15 @@ final class IkigaJSONTests: XCTestCase {
             dictionary[String(i)] = string
         }
 
-        let ikigaPerformance = try measureTime {
+        let ikigaTimeSpent = try measureTime {
             _ = try ikiga.encode(dictionary)
         }
 
-        let foundationPerformance = try measureTime {
+        let foundationTimeSpent = try measureTime {
             _ = try foundation.encode(dictionary)
         }
 
-        XCTAssertLessThan(ikigaPerformance, foundationPerformance)
+        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
     }
 
     func testAllEncoding() throws {
