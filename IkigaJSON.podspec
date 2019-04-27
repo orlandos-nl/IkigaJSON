@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.version          = '2.0.0'
   s.summary          = 'A High performance JSON Codable implementation.'
 
-  s.swift_version = '4.1'
+  s.swift_version = '5.0'
   s.homepage         = 'https://github.com/Ikiga/IkigaJSON'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
   s.author           = { 'joannis' => 'joannis@orlandos.nl' }
