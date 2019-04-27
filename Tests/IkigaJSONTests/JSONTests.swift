@@ -88,7 +88,8 @@ final class IkigaJSONTests: XCTestCase {
         let ikiga = IkigaJSONEncoder()
         let foundation = JSONEncoder()
 
-        let string = "Hello, world"
+        let stringBytes = Array("Hello, world".utf8)
+        let string = String(bytes: stringBytes, encoding: .utf8)!
 
         let array = [String](repeating: string, count: 100_000)
 
@@ -109,7 +110,8 @@ final class IkigaJSONTests: XCTestCase {
         ikiga.settings.expectedJSONSize = 2_000_000
         let foundation = JSONEncoder()
 
-        let string = "Hello, world"
+        let stringBytes = Array("Hello, world".utf8)
+        let string = String(bytes: stringBytes, encoding: .utf8)!
 
         var dictionary = [String: String]()
 

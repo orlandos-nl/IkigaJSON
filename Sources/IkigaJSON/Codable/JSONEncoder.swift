@@ -86,18 +86,20 @@ public enum ExpansionMode {
 /// A type that automatically deallocated the pointer and can be expanded manually or automatically.
 ///
 /// Has a few helpers for writing binary data. Mainly/only used for the JSONDescription.
-final class AutoDeallocatingPointer {
+final class SharedEncoderData {
     var pointer: UnsafeMutablePointer<UInt8>
     private(set) var totalSize: Int
     let expansionMode: ExpansionMode
+    let settings: JSONEncoderSettings
     let expectedSize: Int
     var offset = 0
     
-    init(expectedSize: Int, expansionMode: ExpansionMode) {
+    init(expectedSize: Int, expansionMode: ExpansionMode, settings: JSONEncoderSettings) {
         self.pointer = .allocate(capacity: expectedSize)
         self.expansionMode = expansionMode
         self.totalSize = expectedSize
         self.expectedSize = expectedSize
+        self.settings = settings
     }
     
     /// Expands the buffer to it's new absolute size and copies the usedCapacity to the new buffer.
@@ -141,7 +143,7 @@ final class AutoDeallocatingPointer {
     }
     
     /// Inserts the other autdeallocated storage into this storage
-    func insert(contentsOf storage: AutoDeallocatingPointer, count: Int, at offset: inout Int) {
+    func insert(contentsOf storage: SharedEncoderData, count: Int, at offset: inout Int) {
         beforeWrite(offset: offset, count: count)
         self.pointer.advanced(by: offset).assign(from: storage.pointer, count: count)
         offset = offset &+ count
@@ -155,14 +157,32 @@ final class AutoDeallocatingPointer {
     }
     
     /// Inserts the bytes into this storage
-    func insert(contentsOf storage: [UInt8], at offset: inout Int) {
-        let count = storage.count
-        beforeWrite(offset: offset, count: count)
-        self.pointer.advanced(by: offset).assign(from: storage, count: count)
-        offset = offset &+ count
+    func insert(contentsOf string: String, at offset: inout Int) {
+        let writeOffset = offset
+        let utf8 = string.utf8
+        let count = utf8.withContiguousStorageIfAvailable { utf8String -> Int in
+            self.beforeWrite(offset: writeOffset, count: utf8String.count)
+            self.pointer.advanced(by: writeOffset).assign(
+                from: utf8String.baseAddress!,
+                count: utf8String.count
+            )
+            return utf8String.count
+        }
+
+        if let count = count {
+            offset = offset &+ count
+        } else {
+            let count = utf8.count
+            let buffer = Array(utf8)
+            self.pointer.advanced(by: writeOffset).assign(
+                from: buffer,
+                count: count
+            )
+            offset = offset &+ count
+        }
     }
-    
-    deinit {
+
+    func cleanUp() {
         /// The magic of this class, automatically deallocating thanks to ARC
         pointer.deallocate()
     }
@@ -182,7 +202,9 @@ public struct IkigaJSONEncoder {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
         encoder.writeEnd()
-        return Data(bytes: encoder.data.pointer, count: encoder.offset)
+        let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
+        encoder.cleanUp()
+        return data
     }
     
     public func encodeAndWrite<E: Encodable>(_ value: E, into buffer: inout ByteBuffer) throws {
@@ -190,7 +212,8 @@ public struct IkigaJSONEncoder {
         try value.encode(to: encoder)
         encoder.writeEnd()
         let data = UnsafeRawBufferPointer(start: encoder.data.pointer, count: encoder.offset)
-        buffer.write(bytes: data)
+        buffer.writeBytes(data)
+        encoder.cleanUp()
     }
     
     public func encodeJSONObject<E: Encodable>(from value: E) throws -> JSONObject {
@@ -198,7 +221,9 @@ public struct IkigaJSONEncoder {
         try value.encode(to: encoder)
         encoder.writeEnd()
         let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
-        return try JSONObject(data: data)
+        let object = try JSONObject(data: data)
+        encoder.cleanUp()
+        return object
     }
     
     public func encodeJSONArray<E: Encodable>(from value: E) throws -> JSONArray {
@@ -206,7 +231,9 @@ public struct IkigaJSONEncoder {
         try value.encode(to: encoder)
         encoder.writeEnd()
         let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
-        return try JSONArray(data: data)
+        let array = try JSONArray(data: data)
+        encoder.cleanUp()
+        return array
     }
 }
 
@@ -216,7 +243,7 @@ internal let boolFalse: StaticString = "false"
 
 fileprivate final class _JSONEncoder: Encoder {
     var codingPath: [CodingKey]
-    let data: AutoDeallocatingPointer
+    let data: SharedEncoderData
     private(set) var offset: Int {
         get {
             return data.offset
@@ -228,7 +255,13 @@ fileprivate final class _JSONEncoder: Encoder {
     var end: UInt8?
     var didWriteValue = false
     var userInfo: [CodingUserInfoKey : Any]
-    var settings: JSONEncoderSettings
+    var settings: JSONEncoderSettings {
+        return data.settings
+    }
+
+    func cleanUp() {
+        data.cleanUp()
+    }
     
     func writeEnd() {
         if let end = end {
@@ -237,18 +270,16 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
 
-    init(codingPath: [CodingKey], userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings, data: AutoDeallocatingPointer) {
+    init(codingPath: [CodingKey], userInfo: [CodingUserInfoKey : Any], data: SharedEncoderData) {
         self.codingPath = codingPath
         self.userInfo = userInfo
-        self.settings = settings
         self.data = data
     }
     
     init(userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings) {
         self.codingPath = []
         self.userInfo = userInfo
-        self.settings = settings
-        data = AutoDeallocatingPointer(expectedSize: settings.expectedJSONSize, expansionMode: settings.bufferExpansionMode)
+        data = SharedEncoderData(expectedSize: settings.expectedJSONSize, expansionMode: settings.bufferExpansionMode, settings: settings)
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
@@ -272,7 +303,7 @@ fileprivate final class _JSONEncoder: Encoder {
     
     func writeValue(_ string: String) {
         data.insert(.quote, at: &offset)
-        data.insert(contentsOf: [UInt8](string.utf8), at: &offset)
+        data.insert(contentsOf: string, at: &offset)
         data.insert(.quote, at: &offset)
     }
     
@@ -287,13 +318,13 @@ fileprivate final class _JSONEncoder: Encoder {
     func writeValue(_ value: Double) {
         // TODO: Optimize
         let number = String(value)
-        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
+        data.insert(contentsOf: number, at: &offset)
     }
     
     func writeValue(_ value: Float) {
         // TODO: Optimize
         let number = String(value)
-        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
+        data.insert(contentsOf: number, at: &offset)
     }
 
     // Returns `true` if it was handled, false if it needs to be deferred
@@ -321,7 +352,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = formatter.string(from: date)
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings, data: self.data)
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(date, encoder)
             }
 
@@ -334,7 +365,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = data.base64EncodedString()
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, settings: settings, data: self.data)
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(data, encoder)
             }
 
@@ -455,7 +486,7 @@ fileprivate final class _JSONEncoder: Encoder {
     func writeValue<F: BinaryInteger>(_ value: F) {
         // TODO: Optimize
         let number = String(value)
-        data.insert(contentsOf: [UInt8](number.utf8), at: &offset)
+        data.insert(contentsOf: number, at: &offset)
     }
 
     func writeValue<F: BinaryInteger>(_ value: F?, forKey key: String) {
@@ -479,10 +510,6 @@ fileprivate final class _JSONEncoder: Encoder {
         if let end = end {
             data.insert(end, at: &offset)
         }
-//
-//        if let superEncoder = superEncoder {
-//            superEncoder.data.insert(contentsOf: self.data, count: self.offset, at: &superEncoder.offset)
-//        }
     }
 }
 
@@ -617,19 +644,19 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         return encoder.unkeyedContainer()
     }
     
@@ -771,7 +798,7 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
             return
         }
         
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
     }
 }
@@ -941,19 +968,19 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         return encoder.unkeyedContainer()
     }
     
