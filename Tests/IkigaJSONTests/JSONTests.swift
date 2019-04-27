@@ -85,7 +85,7 @@ final class IkigaJSONTests: XCTestCase {
     }
 
     func testArrayEncodingPerformance() throws {
-        var ikiga = IkigaJSONEncoder()
+        let ikiga = IkigaJSONEncoder()
         let foundation = JSONEncoder()
 
         let string = "Hello, world"
@@ -100,7 +100,7 @@ final class IkigaJSONTests: XCTestCase {
             _ = try foundation.encode(array)
         }
 
-        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
+        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
 
     func testObjectEncodingPerformance() throws {
@@ -125,7 +125,7 @@ final class IkigaJSONTests: XCTestCase {
             _ = try foundation.encode(dictionary)
         }
 
-        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
+        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
 
     func testAllEncoding() throws {
@@ -388,11 +388,11 @@ final class IkigaJSONTests: XCTestCase {
         
         let allocator = ByteBufferAllocator()
         var buffer = allocator.buffer(capacity: 4_096)
-        buffer.write(staticString: "[")
+        buffer.writeStaticString("[")
         try encoder.encodeAndWrite(user0, into: &buffer)
-        buffer.write(staticString: ",")
+        buffer.writeStaticString(",")
         try encoder.encodeAndWrite(user1, into: &buffer)
-        buffer.write(staticString: "]")
+        buffer.writeStaticString("]")
         
         let users = try JSONArray(buffer: buffer)
         XCTAssertEqual(users.count, 2)

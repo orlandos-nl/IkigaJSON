@@ -38,7 +38,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
     /// Parses the data as a JSON Array and configures this JSONArray to index and represent the JSON data
     public init(data: Data) throws {
         var buffer = allocator.buffer(capacity: data.count)
-        buffer.write(bytes: data)
+        buffer.writeBytes(data)
         try self.init(buffer: buffer)
     }
     
@@ -59,8 +59,8 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
     /// An internal type that creates an empty JSONArray with a predefined expected description size
     private init(descriptionSize: Int) {
         var buffer = allocator.buffer(capacity: 4_096)
-        buffer.write(integer: UInt8.squareLeft)
-        buffer.write(integer: UInt8.squareRight)
+        buffer.writeInteger(UInt8.squareLeft)
+        buffer.writeInteger(UInt8.squareRight)
         self.jsonBuffer = buffer
         
         var description = JSONDescription(size: descriptionSize)
@@ -101,20 +101,20 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
         jsonBuffer.moveWriterIndex(to: jsonBuffer.writerIndex &- 1)
         
         if count > 0 {
-            jsonBuffer.write(integer: UInt8.comma)
+            jsonBuffer.writeInteger(UInt8.comma)
         }
         
         let valueJSONOffset = Int32(jsonBuffer.writerIndex)
         let indexOffset = description.buffer.writerIndex
         
         defer {
-            jsonBuffer.write(integer: UInt8.squareRight)
+            jsonBuffer.writeInteger(UInt8.squareRight)
             let extraSize = jsonBuffer.writerIndex - oldSize
             description.incrementArrayCount(jsonSize: Int32(extraSize), atIndexOffset: indexOffset)
         }
         
         func write(_ string: String) -> Bounds {
-            jsonBuffer.write(string: string)
+            jsonBuffer.writeString(string)
             let length = Int32(jsonBuffer.writerIndex) - valueJSONOffset
             return Bounds(offset: valueJSONOffset, length: length)
         }
@@ -122,9 +122,9 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
         switch value {
         case let value as String:
             let (escaped, bytes) = value.escaped
-            jsonBuffer.write(integer: UInt8.quote)
-            jsonBuffer.write(bytes: bytes)
-            jsonBuffer.write(integer: UInt8.quote)
+            jsonBuffer.writeInteger(UInt8.quote)
+            jsonBuffer.writeBytes(bytes)
+            jsonBuffer.writeInteger(UInt8.quote)
             let length = Int32(jsonBuffer.writerIndex) - valueJSONOffset
             let bounds = Bounds(offset: valueJSONOffset, length: length)
             description.describeString(at: bounds, escaped: escaped)
@@ -134,20 +134,20 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
             description.describeNumber(at: write(String(value)), floatingPoint: true)
         case let value as Bool:
             if value {
-                jsonBuffer.write(staticString: boolTrue)
+                jsonBuffer.writeStaticString(boolTrue)
                 description.describeTrue(atJSONOffset: valueJSONOffset)
             } else {
-                jsonBuffer.write(staticString: boolFalse)
+                jsonBuffer.writeStaticString(boolFalse)
                 description.describeFalse(atJSONOffset: valueJSONOffset)
             }
         case is NSNull:
-            jsonBuffer.write(staticString: nullBytes)
+            jsonBuffer.writeStaticString(nullBytes)
             description.describeNull(atJSONOffset: valueJSONOffset)
         case var value as JSONArray:
-            jsonBuffer.write(buffer: &value.jsonBuffer)
+            jsonBuffer.writeBuffer(&value.jsonBuffer)
             description.addNestedDescription(value.description, at: valueJSONOffset)
         case var value as JSONObject:
-            jsonBuffer.write(buffer: &value.jsonBuffer)
+            jsonBuffer.writeBuffer(&value.jsonBuffer)
             description.addNestedDescription(value.description, at: valueJSONOffset)
         default:
             fatalError("Unsupported JSON value \(value)")

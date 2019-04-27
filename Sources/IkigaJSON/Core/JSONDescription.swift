@@ -73,7 +73,7 @@ extension ByteBuffer {
         
         assert(!old.addingReportingOverflow(value).overflow)
         
-        set(integer: old &+ value, at: offset)
+        setInteger(old &+ value, at: offset)
     }
 }
 
@@ -84,7 +84,7 @@ extension JSONDescription {
     mutating func addNestedDescription(_ description: JSONDescription, at jsonOffset: Int32) {
         var description = description
         description.advanceAllJSONOffsets(by: jsonOffset)
-        self.buffer.write(buffer: &description.buffer)
+        self.buffer.writeBuffer(&description.buffer)
     }
     
     /// Moves this index description and all it's child descriptions their JSON offsets forward
@@ -269,9 +269,9 @@ extension JSONDescription {
             length = Int32(_length)
             
             buffer.prepareForRewrite(atOffset: baseOffset, oldSize: Int(jsonBounds.length), newSize: _length)
-            buffer.set(integer: UInt8.quote, at: baseOffset)
-            buffer.set(bytes: characters, at: baseOffset + 1)
-            buffer.set(integer: UInt8.quote, at: baseOffset + 1 + characters.count)
+            buffer.setInteger(UInt8.quote, at: baseOffset)
+            buffer.setBytes(characters, at: baseOffset + 1)
+            buffer.setInteger(UInt8.quote, at: baseOffset + 1 + characters.count)
             
             let newBounds = Bounds(offset: jsonBounds.offset, length: length)
             rewriteString(newBounds, escaped: escaped, atIndexOffset: indexOffset)
@@ -282,7 +282,7 @@ extension JSONDescription {
             let baseOffset = Int(jsonBounds.offset)
 
             buffer.prepareForRewrite(atOffset: baseOffset, oldSize: Int(jsonBounds.length), newSize: _length)
-            buffer.set(string: textualDouble, at: baseOffset)
+            buffer.setString(textualDouble, at: baseOffset)
             
             let newBounds = Bounds(offset: jsonBounds.offset, length: length)
             rewriteNumber(newBounds, floatingPoint: true, atIndexOffset: indexOffset)
@@ -293,7 +293,7 @@ extension JSONDescription {
             let baseOffset = Int(jsonBounds.offset)
             
             buffer.prepareForRewrite(atOffset: baseOffset, oldSize: Int(jsonBounds.length), newSize: _length)
-            buffer.set(string: textualInt, at: baseOffset)
+            buffer.setString(textualInt, at: baseOffset)
             
             let newBounds = Bounds(offset: jsonBounds.offset, length: length)
             rewriteNumber(newBounds, floatingPoint: false, atIndexOffset: indexOffset)
@@ -302,13 +302,13 @@ extension JSONDescription {
                 length = 4
                 buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: 4)
                 
-                _ = buffer.set(staticString: boolTrue, at: Int(jsonBounds.offset))
+                _ = buffer.setStaticString(boolTrue, at: Int(jsonBounds.offset))
                 rewriteTrue(atIndexOffset: indexOffset, jsonOffset: jsonBounds.offset)
             } else {
                 length = 5
                 buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: 5)
                 
-                _ = buffer.set(staticString: boolFalse, at: Int(jsonBounds.offset))
+                _ = buffer.setStaticString(boolFalse, at: Int(jsonBounds.offset))
                 rewriteFalse(atIndexOffset: indexOffset, jsonOffset: jsonBounds.offset)
             }
         case let object as JSONObject:
@@ -333,7 +333,7 @@ extension JSONDescription {
             length = 4
             buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: 4)
             
-            _ = buffer.set(staticString: nullBytes, at: Int(jsonBounds.offset))
+            _ = buffer.setStaticString(nullBytes, at: Int(jsonBounds.offset))
             rewriteTrue(atIndexOffset: indexOffset, jsonOffset: jsonBounds.offset)
         }
     }
@@ -349,9 +349,9 @@ extension JSONDescription {
         
         buffer.prepareForRewrite(atOffset: offset, oldSize: oldSize, newSize: Constants.stringNumberIndexLength)
 
-        buffer.set(integer: type.rawValue, at: offset)
-        buffer.set(integer: value.offset, at: offset + Constants.jsonLocationOffset)
-        buffer.set(integer: value.length, at: offset + Constants.jsonLengthOffset)
+        buffer.setInteger(type.rawValue, at: offset)
+        buffer.setInteger(value.offset, at: offset + Constants.jsonLocationOffset)
+        buffer.setInteger(value.length, at: offset + Constants.jsonLengthOffset)
     }
 
     mutating func rewriteNumber(_ number: Bounds, floatingPoint: Bool, atIndexOffset offset: Int) {
@@ -367,8 +367,8 @@ extension JSONDescription {
 
         buffer.prepareForRewrite(atOffset: indexOffset, oldSize: oldSize, newSize: Constants.boolNullIndexLength)
 
-        buffer.set(integer: type.rawValue, at: indexOffset)
-        buffer.set(integer: jsonOffset, at: indexOffset + Constants.jsonLocationOffset)
+        buffer.setInteger(type.rawValue, at: indexOffset)
+        buffer.setInteger(jsonOffset, at: indexOffset + Constants.jsonLocationOffset)
     }
 
     mutating func rewriteNull(atIndexOffset indexOffset: Int, jsonOffset: Int32) {
@@ -395,9 +395,9 @@ extension JSONDescription {
     mutating func describeString(at stringBounds: Bounds, escaped: Bool) {
         let type: JSONType = escaped ? .stringWithEscaping : .string
         
-        buffer.write(integer: type.rawValue)
-        buffer.write(integer: stringBounds.offset)
-        buffer.write(integer: stringBounds.length)
+        buffer.writeInteger(type.rawValue)
+        buffer.writeInteger(stringBounds.offset)
+        buffer.writeInteger(stringBounds.length)
     }
     
     mutating func describeNumber(at number: Bounds, floatingPoint: Bool) {
@@ -405,31 +405,31 @@ extension JSONDescription {
         let type = floatingPoint ? JSONType.floatingNumber.rawValue : JSONType.integer.rawValue
         
         // Set the new type identifier
-        self.buffer.write(integer: type)
+        self.buffer.writeInteger(type)
         
-        self.buffer.write(integer: number.offset)
-        self.buffer.write(integer: number.length)
+        self.buffer.writeInteger(number.offset)
+        self.buffer.writeInteger(number.length)
     }
     
     mutating func describeTrue(atJSONOffset jsonOffset: Int32) {
-        buffer.write(integer: JSONType.boolTrue.rawValue)
-        buffer.write(integer: jsonOffset)
+        buffer.writeInteger(JSONType.boolTrue.rawValue)
+        buffer.writeInteger(jsonOffset)
     }
     
     mutating func describeFalse(atJSONOffset jsonOffset: Int32) {
-        buffer.write(integer: JSONType.boolFalse.rawValue)
-        buffer.write(integer: jsonOffset)
+        buffer.writeInteger(JSONType.boolFalse.rawValue)
+        buffer.writeInteger(jsonOffset)
     }
     
     mutating func describeNull(atJSONOffset jsonOffset: Int32) {
-        buffer.write(integer: JSONType.null.rawValue)
-        buffer.write(integer: jsonOffset)
+        buffer.writeInteger(JSONType.null.rawValue)
+        buffer.writeInteger(jsonOffset)
     }
     
     mutating func describeArray(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
         let indexOffset = buffer.writerIndex
-        buffer.write(integer: JSONType.array.rawValue)
-        buffer.write(integer: jsonOffset)
+        buffer.writeInteger(JSONType.array.rawValue)
+        buffer.writeInteger(jsonOffset)
         buffer.moveWriterIndex(forwardBy: 12)
         
         return UnfinishedDescription(
@@ -440,8 +440,8 @@ extension JSONDescription {
     
     mutating func describeObject(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
         let indexOffset = buffer.writerIndex
-        buffer.write(integer: JSONType.object.rawValue)
-        buffer.write(integer: jsonOffset)
+        buffer.writeInteger(JSONType.object.rawValue)
+        buffer.writeInteger(jsonOffset)
         buffer.moveWriterIndex(forwardBy: 12)
         
         return UnfinishedDescription(
@@ -451,11 +451,11 @@ extension JSONDescription {
     }
     
     mutating func complete(_ unfinished: UnfinishedDescription, withResult result: _ArrayObjectDescription) {
-        buffer.set(integer: result.jsonByteCount, at: unfinished.indexOffset &+ Constants.jsonLengthOffset)
-        buffer.set(integer: result.valueCount, at: unfinished.indexOffset &+ Constants.arrayObjectPairCountOffset)
+        buffer.setInteger(result.jsonByteCount, at: unfinished.indexOffset &+ Constants.jsonLengthOffset)
+        buffer.setInteger(result.valueCount, at: unfinished.indexOffset &+ Constants.arrayObjectPairCountOffset)
         
         let indexLength = Int32(buffer.writerIndex &- unfinished.firstChildIndexOffset)
-        buffer.set(integer: indexLength, at: unfinished.indexOffset &+ Constants.arrayObjectTotalIndexLengthOffset)
+        buffer.setInteger(indexLength, at: unfinished.indexOffset &+ Constants.arrayObjectTotalIndexLengthOffset)
     }
 }
 
