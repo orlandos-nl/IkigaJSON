@@ -1,7 +1,7 @@
 import Foundation
 import NIO
 
-#if os(Linux) && !swift(>=4.2.2) && !swift(>=5)
+#if os(Linux) && !swift(>=4.2.2) && !compiler(>=5.0)
 extension JSONEncoder {
     public enum KeyEncodingStrategy {
         case useDefaultKeys
