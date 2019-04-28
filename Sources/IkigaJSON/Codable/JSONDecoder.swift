@@ -9,7 +9,7 @@ let isoDateFormatter: DateFormatter = {
     return formatter
 }()
 
-#if os(Linux) && !swift(>=4.2.2)
+#if os(Linux) && !swift(>=4.2.2) && !swift(>=5)
 extension JSONDecoder {
     public enum KeyDecodingStrategy {
         case useDefaultKeys
