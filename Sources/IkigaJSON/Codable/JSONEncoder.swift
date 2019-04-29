@@ -1,16 +1,6 @@
 import Foundation
 import NIO
 
-#if os(Linux) && !swift(>=4.2.2)
-extension JSONEncoder {
-    public enum KeyEncodingStrategy {
-        case useDefaultKeys
-        case convertToSnakeCase
-        case custom(([CodingKey]) -> CodingKey)
-    }
-}
-#endif
-
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings {
     public init() {}
@@ -354,6 +344,8 @@ fileprivate final class _JSONEncoder: Encoder {
             case .custom(let custom):
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(date, encoder)
+            @unknown default:
+                throw JSONError.unknownJSONStrategy
             }
 
             return true
@@ -367,6 +359,8 @@ fileprivate final class _JSONEncoder: Encoder {
             case .custom(let custom):
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(data, encoder)
+            @unknown default:
+                throw JSONError.unknownJSONStrategy
             }
 
             return true

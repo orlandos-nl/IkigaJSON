@@ -8,16 +8,6 @@ let isoDateFormatter: DateFormatter = {
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
     return formatter
 }()
-
-#if os(Linux) && !swift(>=4.2.2)
-extension JSONDecoder {
-    public enum KeyDecodingStrategy {
-        case useDefaultKeys
-        case convertFromSnakeCase
-        case custom(([CodingKey]) -> CodingKey)
-    }
-}
-#endif
     
 func date(from string: String) throws -> Date {
     if #available(OSX 10.12, iOS 11, *) {
@@ -232,6 +222,8 @@ fileprivate struct _JSONDecoder: Decoder {
                 return date as! D
             case .custom(let makeDate):
                 return try makeDate(self) as! D
+            @unknown default:
+                throw JSONError.unknownJSONStrategy
             }
         case is Data.Type:
             switch self.settings.dataDecodingStrategy {
@@ -247,6 +239,8 @@ fileprivate struct _JSONDecoder: Decoder {
                 return data as! D
             case .custom(let makeData):
                 return try makeData(self) as! D
+            @unknown default:
+                throw JSONError.unknownJSONStrategy
             }
         default:
             break
