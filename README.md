@@ -91,10 +91,10 @@ By design you can build on top of any data storage as long as it exposes a point
 - Date/Data _encoding_ strategies
 - Raw JSON APIs (non-codable)
 - Codable decoding from `JSONObject` and `JSONArray`
+- `\u` escaped unicode characters
 
 TODO:
 
-- `\u` escaped unicode characters
 - Lightweight JSON inline comparison helpers
 
 ### Media
