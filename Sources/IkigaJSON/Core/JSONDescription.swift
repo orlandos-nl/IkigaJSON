@@ -430,6 +430,7 @@ extension JSONDescription {
         let indexOffset = buffer.writerIndex
         buffer.write(integer: JSONType.array.rawValue)
         buffer.write(integer: jsonOffset)
+        buffer.reserveCapacity(buffer.readableBytes + 12)
         buffer.moveWriterIndex(forwardBy: 12)
         
         return UnfinishedDescription(
@@ -442,6 +443,7 @@ extension JSONDescription {
         let indexOffset = buffer.writerIndex
         buffer.write(integer: JSONType.object.rawValue)
         buffer.write(integer: jsonOffset)
+        buffer.reserveCapacity(buffer.readableBytes + 12)
         buffer.moveWriterIndex(forwardBy: 12)
         
         return UnfinishedDescription(
