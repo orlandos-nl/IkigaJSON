@@ -1,7 +1,7 @@
 import Foundation
 import NIO
 
-@available(OSX 10.12, *)
+@available(OSX 10.12, iOS 10, *)
 let isoFormatter = ISO8601DateFormatter()
 let isoDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
