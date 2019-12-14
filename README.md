@@ -37,6 +37,49 @@ var decoder = IkigaJSONDecoder()
 let user = try decoder.decode(User.self, from: data)
 ```
 
+### In Vapor 4
+
+Conform Ikiga to Vapor 4's protocols like so:
+
+```swift
+extension IkigaJSONEncoder: ContentEncoder {
+    public func encode<E: Encodable>(
+        _ encodable: E,
+        to body: inout ByteBuffer,
+        headers: inout HTTPHeaders
+    ) throws {
+        headers.contentType = .json
+        try self.encodeAndWrite(encodable, into: &body)
+    }
+}
+
+extension IkigaJSONDecoder: ContentDecoder {
+    public func decode<D: Decodable>(
+        _ decodable: D.Type,
+        from body: ByteBuffer,
+        headers: HTTPHeaders
+    ) throws -> D {
+        guard headers.contentType == .json || headers.contentType == .jsonAPI else {
+            throw Abort(.unsupportedMediaType)
+        }
+        
+        return try self.decode(D.self, from: body)
+    }
+}
+```
+
+Register the encoder/decoder to Vapor like so:
+
+```swift
+var decoder = IkigaJSONDecoder()
+decoder.settings.dateDecodingStrategy = .iso8601
+ContentConfiguration.global.use(decoder: decoder, for: .json)
+
+var encoder = IkigaJSONEncoder()
+encoder.settings.dateDecodingStrategy = .iso8601
+ContentConfiguration.global.use(encoder: encoder, for: .json)
+```
+
 ### Raw JSON
 
 IkigaJSON supports raw JSON types (JSONObject and JSONArray) like many other libraries do, alongside the codable API described above. The critical difference is that IkigaJSON edits the JSON inline, so there's no additional conversion overhead from Swift type to JSON.
@@ -95,6 +138,7 @@ By design you can build on top of any data storage as long as it exposes a point
 
 TODO:
 
+- JSON error accumulation
 - Lightweight JSON inline comparison helpers
 
 ### Media
