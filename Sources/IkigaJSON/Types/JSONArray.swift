@@ -27,7 +27,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
     
     /// A list of all top-level keys within this JSONArray
     public var string: String! {
-        return String(data: data, encoding: .utf8)
+        return jsonBuffer.getString(at: 0, length: jsonBuffer.readableBytes)
     }
     
     /// Creates a new, empty JSONArray
@@ -270,16 +270,20 @@ extension String {
 }
 
 public struct JSONArrayIterator: IteratorProtocol {
-    private let array: JSONArray
-    
     init(array: JSONArray) {
         self.array = array
         self.count = array.count
     }
     
-    private let count: Int
-    private var index = 0
+    public let array: JSONArray
+    public let count: Int
+    public var index = 0 {
+        didSet {
+            assert(index >= 0 && index < count, "Invalid index")
+        }
+    }
     
+    @inlinable
     public mutating func next() -> JSONValue? {
         guard index < count else { return nil }
         defer { index = index &+ 1 }

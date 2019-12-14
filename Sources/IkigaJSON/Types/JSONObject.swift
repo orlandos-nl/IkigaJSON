@@ -38,7 +38,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
     
     /// A JSON formatted String with the contents of this JSONObject
     public var string: String! {
-        return String(data: data, encoding: .utf8)
+        jsonBuffer.getString(at: 0, length: jsonBuffer.readableBytes)
     }
     
     /// Creates a new, empty JSONObject
@@ -97,12 +97,14 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
     }
     
     /// Creates a new JSONObject from an already indexes JSON blob as an optimization for nested objects
+    @usableFromInline
     internal init(buffer: ByteBuffer, description: JSONDescription) {
         self.jsonBuffer = buffer
         self.description = description
     }
     
     /// Removed a value at a specified index and json offset
+    @usableFromInline
     internal mutating func removeValue(index: Int, offset: Int) {
         let firstElement = index == 0
         let hasComma = description.arrayObjectCount() > 1
@@ -162,6 +164,14 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
         jsonBuffer.removeBytes(atOffset: Int(bounds.offset), oldSize: Int(bounds.length))
         
         description.removeObjectDescription(atKeyIndex: offset, jsonOffset: Int(keyBounds.offset), removedJSONLength: Int(bounds.length))
+    }
+    
+    public func value(forKey key: String) -> JSONValue? {
+        jsonBuffer.withUnsafeReadableBytes { buffer -> JSONValue? in
+            let buffer = buffer.bindMemory(to: UInt8.self)
+            let pointer = buffer.baseAddress!
+            return value(forKey: key, in: pointer)
+        }
     }
     
     /// Reads the JSONValue associated with the specified key
@@ -335,23 +345,29 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
 }
 
 public struct JSONObjectIterator: IteratorProtocol {
-    private let object: JSONObject
-    private let keys: [String]
-    private var index: Int
+    public let object: JSONObject
+    public let keys: [String]
+    public let count: Int
+    public var index: Int {
+        didSet {
+            assert(index >= 0 && index < count, "Invalid index")
+       }
+   }
     
     init(object: JSONObject) {
         self.object = object
         self.keys = object.keys
+        self.count = keys.count
         self.index = 0
     }
     
+    @inlinable
     public mutating func next() -> (String, JSONValue)? {
-        guard index < keys.count else { return nil }
+        guard index < count else { return nil }
         defer { index += 1 }
+        
         let key = keys[index]
-        let value = object.jsonBuffer.withBytePointer { pointer in
-            return object.value(forKey: key, in: pointer)
-        }
+        let value = object.value(forKey: key)
         
         if let value = value {
             return (key, value)

@@ -15,6 +15,7 @@ fileprivate extension UInt8 {
     }
 }
 
+@usableFromInline
 internal struct Bounds {
     var offset: Int32
     var length: Int32
@@ -23,6 +24,7 @@ internal struct Bounds {
     /// Assumes the length is checked against the bounds `self`
     ///
     /// - see: `makeStringFromData` for more information
+    @usableFromInline
     func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
         if let data = makeStringData(from: pointer, escaping: escaping, unicode: unicode) {
             return String(data: data, encoding: .utf8)
@@ -36,6 +38,7 @@ internal struct Bounds {
     ///
     /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
     /// towards unescaping.
+    @usableFromInline
     func makeStringData(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> Data? {
         var data = Data(bytes: pointer + Int(offset), count: Int(length))
         
@@ -102,6 +105,7 @@ internal struct Bounds {
     /// Uses the fast path for doubles if possible, when failing falls back to Foundation.
     ///
     /// https://www.exploringbinary.com/fast-path-decimal-to-floating-point-conversion/
+    @usableFromInline
     internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double? {
         let offset = Int(self.offset)
         let length = Int(self.length)
@@ -235,6 +239,7 @@ internal struct Bounds {
         return fallback()
     }
     
+    @usableFromInline
     internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
         var offset = Int(self.offset)
         
