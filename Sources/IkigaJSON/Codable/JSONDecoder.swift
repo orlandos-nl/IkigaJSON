@@ -140,6 +140,7 @@ public final class IkigaJSONDecoder {
 }
 
 fileprivate struct _JSONDecoder: Decoder {
+    @usableFromInline
     let description: JSONDescription
     let pointer: UnsafePointer<UInt8>
     let settings: JSONDecoderSettings
@@ -150,6 +151,8 @@ fileprivate struct _JSONDecoder: Decoder {
         return settings.userInfo
     }
     
+
+    @usableFromInline
     func string<Key: CodingKey>(forKey key: Key) -> String {
         if case .custom(let builder) = settings.keyDecodingStrategy {
             return builder(codingPath + [key]).stringValue
@@ -158,6 +161,8 @@ fileprivate struct _JSONDecoder: Decoder {
         }
     }
     
+
+    @usableFromInline
     func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> where Key : CodingKey {
         guard description.topLevelType == .object else {
             throw JSONError.missingKeyedContainer
@@ -167,6 +172,8 @@ fileprivate struct _JSONDecoder: Decoder {
         return KeyedDecodingContainer(container)
     }
     
+
+    @usableFromInline
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
         guard description.topLevelType == .array else {
             throw JSONError.missingUnkeyedContainer
@@ -175,10 +182,14 @@ fileprivate struct _JSONDecoder: Decoder {
         return UnkeyedJSONDecodingContainer(decoder: self)
     }
     
+
+    @usableFromInline
     func singleValueContainer() throws -> SingleValueDecodingContainer {
         return SingleValueJSONDecodingContainer(decoder: self)
     }
     
+
+    @usableFromInline
     init(description: JSONDescription, pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
         self.description = description
         self.pointer = pointer
@@ -191,11 +202,15 @@ fileprivate struct _JSONDecoder: Decoder {
         }
     }
     
+
+    @usableFromInline
     func subDecoder(offsetBy offset: Int) -> _JSONDecoder {
         let subDescription = self.description.subDescription(offset: offset)
         return _JSONDecoder(description: subDescription, pointer: pointer, settings: settings)
     }
     
+
+    @usableFromInline
     func decode<D: Decodable>(_ type: D.Type) throws -> D {
         switch type {
         case is Date.Type:
@@ -267,7 +282,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     var allKeys: [Key] {
         return allStringKeys.compactMap(Key.init)
     }
-    
+
+    @usableFromInline
     func contains(_ key: Key) -> Bool {
         return decoder.description.containsKey(
             decoder.string(forKey: key),
@@ -276,7 +292,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             unicode: decoder.settings.decodeUnicode
         )
     }
-    
+
+    @usableFromInline
     func decodeNil(forKey key: Key) throws -> Bool {
         guard let type = decoder.description.type(
             ofKey: decoder.string(forKey: key),
@@ -288,7 +305,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         return type == .null
     }
-    
+
+    @usableFromInline
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
         guard let jsonType = decoder.description.type(
             ofKey: decoder.string(forKey: key),
@@ -307,7 +325,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             throw JSONError.decodingError(expected: type, keyPath: codingPath + [key])
         }
     }
-    
+
+    @usableFromInline
     func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
         return decoder.description.floatingBounds(
             forKey: decoder.string(forKey: key),
@@ -315,7 +334,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             in: decoder.pointer
         )
     }
-    
+
+    @usableFromInline
     func integerBounds(forKey key: Key) -> Bounds? {
         return decoder.description.integerBounds(
             forKey: decoder.string(forKey: key),
@@ -323,7 +343,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
             in: decoder.pointer
         )
     }
-    
+
+    @usableFromInline
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
         guard let (bounds, escaped) = decoder.description.stringBounds(
             forKey: decoder.string(forKey: key),
@@ -343,7 +364,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         return string
     }
-    
+
+    @usableFromInline
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
         guard
             let (bounds, floating) = floatingBounds(forKey: key),
@@ -354,7 +376,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         return double
     }
-    
+
+    @usableFromInline
     func decode(_ type: Float.Type, forKey key: Key) throws -> Float {
         guard
             let (bounds, floating) = floatingBounds(forKey: key),
@@ -365,7 +388,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         return Float(double)
     }
-    
+
+    @usableFromInline
     func decodeInt<F: FixedWidthInteger>(_ type: F.Type, forKey key: Key) throws -> F {
         if let bounds = integerBounds(forKey: key), let int = bounds.makeInt(from: decoder.pointer) {
             return try int.convert(to: F.self)
@@ -373,47 +397,58 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         throw JSONError.decodingError(expected: F.self, keyPath: codingPath)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 {
         return try decodeInt(type, forKey: key)
     }
-    
+
+    @usableFromInline
     func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T : Decodable {
         guard let (_, offset) = self.decoder.description.valueOffset(
             forKey: self.decoder.string(forKey: key),
@@ -426,7 +461,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         let decoder = self.decoder.subDecoder(offsetBy: offset)
         return try decoder.decode(type)
     }
-    
+
+    @usableFromInline
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
         guard let (_, offset) = self.decoder.description.valueOffset(
             forKey: self.decoder.string(forKey: key),
@@ -440,7 +476,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         decoder.codingPath.append(key)
         return try decoder.container(keyedBy: NestedKey.self)
     }
-    
+
+    @usableFromInline
     func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
         guard let (_, offset) = self.decoder.description.valueOffset(
             forKey: self.decoder.string(forKey: key),
@@ -454,11 +491,13 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         decoder.codingPath.append(key)
         return try decoder.unkeyedContainer()
     }
-    
+
+    @usableFromInline
     func superDecoder() throws -> Decoder {
         return decoder
     }
-    
+
+    @usableFromInline
     func superDecoder(forKey key: Key) throws -> Decoder {
         return decoder
     }
@@ -499,7 +538,8 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         decoder.description.skipIndex(atOffset: &offset)
         currentIndex = currentIndex &+ 1
     }
-    
+
+    @usableFromInline
     func assertHasMore() throws {
         guard !isAtEnd else {
             throw JSONError.endOfObject
@@ -673,11 +713,13 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         return decoder.codingPath
     }
     let decoder: _JSONDecoder
-    
+
+    @usableFromInline
     func decodeNil() -> Bool {
         return decoder.description.topLevelType == .null
     }
-    
+
+    @usableFromInline
     func floatingBounds() -> (Bounds, Bool)? {
         let type = decoder.description.topLevelType
         
@@ -688,7 +730,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         let bounds = decoder.description.dataBounds(atIndexOffset: 0)
         return (bounds, type == .floatingNumber)
     }
-    
+
+    @usableFromInline
     func integerBounds() -> Bounds? {
         if decoder.description.topLevelType != .integer {
             return nil
@@ -696,7 +739,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         return decoder.description.dataBounds(atIndexOffset: 0)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Bool.Type) throws -> Bool {
         switch decoder.description.topLevelType {
         case .boolTrue: return true
@@ -704,7 +748,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         default: throw JSONError.decodingError(expected: type, keyPath: codingPath)
         }
     }
-    
+
+    @usableFromInline
     func decode(_ type: String.Type) throws -> String {
         let jsonType = decoder.description.topLevelType
         
@@ -724,7 +769,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         return string
     }
-    
+
+    @usableFromInline
     func decode(_ type: Double.Type) throws -> Double {
         guard
             let (bounds, floating) = floatingBounds(),
@@ -735,7 +781,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         return double
     }
-    
+
+    @usableFromInline
     func decode(_ type: Float.Type) throws -> Float {
         guard
             let (bounds, floating) = floatingBounds(),
@@ -746,47 +793,58 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         return Float(double)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int.Type) throws -> Int {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int8.Type) throws -> Int8 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int16.Type) throws -> Int16 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int32.Type) throws -> Int32 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: Int64.Type) throws -> Int64 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt.Type) throws -> UInt {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt8.Type) throws -> UInt8 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt16.Type) throws -> UInt16 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt32.Type) throws -> UInt32 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decode(_ type: UInt64.Type) throws -> UInt64 {
         return try decodeInt(ofType: type)
     }
-    
+
+    @usableFromInline
     func decodeInt<F: FixedWidthInteger>(ofType type: F.Type) throws -> F {
         let jsonType = decoder.description.topLevelType
         
@@ -802,7 +860,8 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         
         return try int.convert(to: type)
     }
-    
+
+    @usableFromInline
     func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
         return try decoder.decode(type)
     }
@@ -812,6 +871,8 @@ extension FixedWidthInteger {
     /// Converts the current FixedWidthInteger to another FixedWithInteger type `I`
     ///
     /// Throws a `BSONTypeConversionError` if the range of `I` does not contain `self`
+
+    @usableFromInline
     internal func convert<I: FixedWidthInteger>(to int: I.Type) throws -> I {
         // If I is smaller in width we need to see if the current integer fits inside of I
         if I.bitWidth < Self.bitWidth {

@@ -76,25 +76,70 @@ public enum ExpansionMode {
 /// A type that automatically deallocated the pointer and can be expanded manually or automatically.
 ///
 /// Has a few helpers for writing binary data. Mainly/only used for the JSONDescription.
+@usableFromInline
 final class SharedEncoderData {
     var pointer: UnsafeMutablePointer<UInt8>
     private(set) var totalSize: Int
     let expansionMode: ExpansionMode
     let settings: JSONEncoderSettings
     let expectedSize: Int
+    var ends: [UInt8]
+    var didWriteValueMap: [Bool]
     var offset = 0
     
+    @usableFromInline
     init(expectedSize: Int, expansionMode: ExpansionMode, settings: JSONEncoderSettings) {
         self.pointer = .allocate(capacity: expectedSize)
         self.expansionMode = expansionMode
         self.totalSize = expectedSize
         self.expectedSize = expectedSize
         self.settings = settings
+        self.ends = []
+        self.didWriteValueMap = []
+    }
+    
+    @usableFromInline
+    func pushEnd(_ end: UInt8, nesting: Int) {
+        if nesting < ends.count {
+            for _ in 0 ..< ends.count - nesting {
+                insert(ends.removeLast(), at: &offset)
+                didWriteValueMap.removeLast()
+            }
+            ends.append(end)
+            didWriteValueMap.append(false)
+        } else {
+            // nesting > ends.count
+            for _ in ends.count ... nesting {
+                ends.append(end)
+                didWriteValueMap.append(false)
+            }
+        }
+    }
+    
+    @usableFromInline
+    func applyEnds(nesting: Int) {
+        let nesting = nesting + 1
+        if ends.count > nesting {
+            for _ in nesting ..< ends.count {
+                insert(ends.removeLast(), at: &offset)
+                didWriteValueMap.removeLast()
+            }
+        }
+    }
+    
+    @usableFromInline
+    func applyEnds() {
+        var count = ends.count
+        for _ in 0..<count {
+            count -= 1
+            insert(ends.removeLast(), at: &offset)
+        }
     }
     
     /// Expands the buffer to it's new absolute size and copies the usedCapacity to the new buffer.
     ///
     /// Any data after the userCapacity is lost
+    @inline(__always)
     func expand(to count: Int, usedCapacity size: Int) {
         let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
         new.assign(from: pointer, count: size)
@@ -104,6 +149,7 @@ final class SharedEncoderData {
     }
     
     /// Expects `offset + count` bytes in this buffer, if this buffer is too small it's expanded
+    @inline(__always)
     private func beforeWrite(offset: Int, count: Int) {
         let needed = (offset &+ count) &- totalSize
         
@@ -126,6 +172,7 @@ final class SharedEncoderData {
     }
     
     /// Inserts the byte into this storage
+    @inline(__always)
     func insert(_ byte: UInt8, at offset: inout Int) {
         beforeWrite(offset: offset, count: 1)
         self.pointer.advanced(by: offset).pointee = byte
@@ -133,6 +180,7 @@ final class SharedEncoderData {
     }
     
     /// Inserts the other autdeallocated storage into this storage
+    @inline(__always)
     func insert(contentsOf storage: SharedEncoderData, count: Int, at offset: inout Int) {
         beforeWrite(offset: offset, count: count)
         self.pointer.advanced(by: offset).assign(from: storage.pointer, count: count)
@@ -140,6 +188,7 @@ final class SharedEncoderData {
     }
     
     /// Inserts the other autdeallocated storage into this storage
+    @inline(__always)
     func insert(contentsOf storage: StaticString, at offset: inout Int) {
         beforeWrite(offset: offset, count: storage.utf8CodeUnitCount)
         self.pointer.advanced(by: offset).assign(from: storage.utf8Start, count: storage.utf8CodeUnitCount)
@@ -147,6 +196,7 @@ final class SharedEncoderData {
     }
     
     /// Inserts the bytes into this storage
+    @inline(__always)
     func insert(contentsOf string: String, at offset: inout Int) {
         let writeOffset = offset
         let utf8 = string.utf8
@@ -171,13 +221,13 @@ final class SharedEncoderData {
             offset = offset &+ count
         }
     }
-
+    
+    @usableFromInline
     func cleanUp() {
         /// The magic of this class, automatically deallocating thanks to ARC
         pointer.deallocate()
     }
 }
-
 
 /// A JSON Encoder that aims to be largely functionally equivalent to Foundation.JSONEncoder.
 public struct IkigaJSONEncoder {
@@ -191,7 +241,7 @@ public struct IkigaJSONEncoder {
     public func encode<E: Encodable>(_ value: E) throws -> Data {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
-        encoder.writeEnd()
+        encoder.data.applyEnds()
         let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
         encoder.cleanUp()
         return data
@@ -200,7 +250,7 @@ public struct IkigaJSONEncoder {
     public func encodeAndWrite<E: Encodable>(_ value: E, into buffer: inout ByteBuffer) throws {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
-        encoder.writeEnd()
+        encoder.data.applyEnds()
         let data = UnsafeRawBufferPointer(start: encoder.data.pointer, count: encoder.offset)
         buffer.writeBytes(data)
         encoder.cleanUp()
@@ -209,7 +259,7 @@ public struct IkigaJSONEncoder {
     public func encodeJSONObject<E: Encodable>(from value: E) throws -> JSONObject {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
-        encoder.writeEnd()
+        encoder.data.applyEnds()
         let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
         let object = try JSONObject(data: data)
         encoder.cleanUp()
@@ -219,7 +269,7 @@ public struct IkigaJSONEncoder {
     public func encodeJSONArray<E: Encodable>(from value: E) throws -> JSONArray {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
-        encoder.writeEnd()
+        encoder.data.applyEnds()
         let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
         let array = try JSONArray(data: data)
         encoder.cleanUp()
@@ -231,86 +281,110 @@ internal let nullBytes: StaticString = "null"
 internal let boolTrue: StaticString = "true"
 internal let boolFalse: StaticString = "false"
 
-fileprivate final class _JSONEncoder: Encoder {
+fileprivate struct _JSONEncoder: Encoder {
     var codingPath: [CodingKey]
+    var nesting: Int
+    
+    @usableFromInline
     let data: SharedEncoderData
-    private(set) var offset: Int {
+    
+    @inline(__always)
+    var offset: Int {
         get {
             return data.offset
         }
-        set {
+        nonmutating set {
             data.offset = newValue
         }
     }
-    var end: UInt8?
-    var didWriteValue = false
+    
+    @inline(__always)
+    var didWriteValue: Bool {
+        get {
+            data.didWriteValueMap[nesting]
+        }
+        nonmutating set {
+            data.didWriteValueMap[nesting] = newValue
+        }
+    }
     var userInfo: [CodingUserInfoKey : Any]
     var settings: JSONEncoderSettings {
         return data.settings
     }
-
+    
+    @usableFromInline
     func cleanUp() {
         data.cleanUp()
     }
     
-    func writeEnd() {
-        if let end = end {
-            data.insert(end, at: &offset)
-            self.end = nil
-        }
-    }
-
-    init(codingPath: [CodingKey], userInfo: [CodingUserInfoKey : Any], data: SharedEncoderData) {
+    @usableFromInline
+    init(codingPath: [CodingKey], userInfo: [CodingUserInfoKey : Any], data: SharedEncoderData, nesting: Int) {
         self.codingPath = codingPath
         self.userInfo = userInfo
         self.data = data
+        self.nesting = nesting
     }
     
+    @usableFromInline
     init(userInfo: [CodingUserInfoKey : Any], settings: JSONEncoderSettings) {
         self.codingPath = []
         self.userInfo = userInfo
+        self.nesting = 0
         data = SharedEncoderData(expectedSize: settings.expectedJSONSize, expansionMode: settings.bufferExpansionMode, settings: settings)
     }
-    
+
+    @usableFromInline
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
         data.insert(.curlyLeft, at: &offset)
-        end = .curlyRight
+        data.pushEnd(.curlyRight, nesting: nesting)
         
         let container = KeyedJSONEncodingContainer<Key>(encoder: self)
         return KeyedEncodingContainer(container)
     }
-    
+
+    @usableFromInline
     func unkeyedContainer() -> UnkeyedEncodingContainer {
         data.insert(.squareLeft, at: &offset)
-        end = .squareRight
+        data.pushEnd(.squareRight, nesting: nesting)
         
         return UnkeyedJSONEncodingContainer(encoder: self)
     }
-    
+
+    @usableFromInline
     func singleValueContainer() -> SingleValueEncodingContainer {
         return SingleValueJSONEncodingContainer(encoder: self)
     }
     
+    @inline(__always)
+    func beforeValueWrite() {
+        data.applyEnds(nesting: nesting)
+    }
+    
+    @inline(__always)
     func writeValue(_ string: String) {
         data.insert(.quote, at: &offset)
         data.insert(contentsOf: string, at: &offset)
         data.insert(.quote, at: &offset)
     }
     
+    @inline(__always)
     func writeNull() {
         data.insert(contentsOf: nullBytes, at: &offset)
     }
     
+    @inline(__always)
     func writeValue(_ value: Bool) {
         data.insert(contentsOf: value ? boolTrue : boolFalse, at: &offset)
     }
     
+    @inline(__always)
     func writeValue(_ value: Double) {
         // TODO: Optimize
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
     }
     
+    @inline(__always)
     func writeValue(_ value: Float) {
         // TODO: Optimize
         let number = String(value)
@@ -318,6 +392,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
 
     // Returns `true` if it was handled, false if it needs to be deferred
+    @usableFromInline
     func writeOtherValue<T: Encodable>(_ value: T) throws -> Bool {
         switch value {
         case let date as Date:
@@ -342,7 +417,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = formatter.string(from: date)
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data, nesting: self.nesting + 1)
                 try custom(date, encoder)
             @unknown default:
                 throw JSONError.unknownJSONStrategy
@@ -357,7 +432,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let string = data.base64EncodedString()
                 writeValue(string)
             case .custom(let custom):
-                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
+                let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data, nesting: self.nesting + 1)
                 try custom(data, encoder)
             @unknown default:
                 throw JSONError.unknownJSONStrategy
@@ -369,7 +444,10 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeComma() {
+        beforeValueWrite()
+        
         if didWriteValue {
             data.insert(.comma, at: &offset)
         } else {
@@ -377,22 +455,26 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeKey(_ key: String) {
         writeComma()
         writeValue(key)
         data.insert(.colon, at: &offset)
     }
     
+    @inline(__always)
     func writeNull(forKey key: String) {
         writeKey(key)
         writeNull()
     }
     
+    @inline(__always)
     func writeValue(_ value: String, forKey key: String) {
         writeKey(key)
         writeValue(value)
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: String?) {
         if let value = value {
             writeValue(value)
@@ -400,7 +482,8 @@ fileprivate final class _JSONEncoder: Encoder {
             writeNull()
         }
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: String?, forKey key: String) {
         if let value = value {
             writeValue(value, forKey: key)
@@ -409,11 +492,13 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeValue(_ value: Bool, forKey key: String) {
         writeKey(key)
         writeValue(value)
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Bool?) {
         if let value = value {
             writeValue(value)
@@ -421,7 +506,8 @@ fileprivate final class _JSONEncoder: Encoder {
             writeNull()
         }
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Bool?, forKey key: String) {
         if let value = value {
             writeValue(value, forKey: key)
@@ -430,11 +516,13 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeValue(_ value: Double, forKey key: String) {
         writeKey(key)
         writeValue(value)
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Double?) {
         if let value = value {
             writeValue(value)
@@ -442,7 +530,8 @@ fileprivate final class _JSONEncoder: Encoder {
             writeNull()
         }
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Double?, forKey key: String) {
         if let value = value {
             writeValue(value, forKey: key)
@@ -451,11 +540,13 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeValue(_ value: Float, forKey key: String) {
         writeKey(key)
         writeValue(value)
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Float?) {
         if let value = value {
             writeValue(value)
@@ -463,7 +554,8 @@ fileprivate final class _JSONEncoder: Encoder {
             writeNull()
         }
     }
-
+    
+    @inline(__always)
     func writeValue(_ value: Float?, forKey key: String) {
         if let value = value {
             writeValue(value, forKey: key)
@@ -472,17 +564,20 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
+    @inline(__always)
     func writeValue<F: BinaryInteger>(_ value: F, forKey key: String) {
         writeKey(key)
         writeValue(value)
     }
     
+    @inline(__always)
     func writeValue<F: BinaryInteger>(_ value: F) {
         // TODO: Optimize
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
     }
-
+    
+    @inline(__always)
     func writeValue<F: BinaryInteger>(_ value: F?, forKey key: String) {
         if let value = value {
             writeKey(key)
@@ -491,18 +586,13 @@ fileprivate final class _JSONEncoder: Encoder {
             writeNull(forKey: key)
         }
     }
-
+    
+    @inline(__always)
     func writeValue<F: BinaryInteger>(_ value: F?) {
         if let value = value {
             writeValue(value)
         } else if settings.encodeNilAsNull {
             writeNull()
-        }
-    }
-    
-    deinit {
-        if let end = end {
-            data.insert(end, at: &offset)
         }
     }
 }
@@ -513,124 +603,154 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         return encoder.codingPath
     }
     
+    @usableFromInline
     mutating func encodeNil(forKey key: Key) throws {
         if encoder.settings.encodeNilAsNull {
             encoder.writeNull(forKey: key.stringValue)
         }
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Bool?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: String?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Double?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Float?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int8?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int16?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int32?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int64?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt8?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt16?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt32?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt64?, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Bool, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: String, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Double, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Float, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int8, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int16, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int32, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int64, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt8, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt16, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt32, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt64, forKey key: Key) throws {
         encoder.writeValue(value, forKey: key.stringValue)
     }
     
+    @usableFromInline
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
         self.encoder.writeKey(key.stringValue)
 
@@ -638,26 +758,30 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         try value.encode(to: encoder)
     }
     
+    @usableFromInline
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         return encoder.container(keyedBy: keyType)
     }
     
+    @usableFromInline
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
         self.encoder.writeKey(key.stringValue)
-        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         return encoder.unkeyedContainer()
     }
     
+    @usableFromInline
     mutating func superEncoder() -> Encoder {
         return encoder
     }
     
+    @usableFromInline
     mutating func superEncoder(forKey key: Key) -> Encoder {
         return encoder
     }
@@ -669,130 +793,160 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
         return encoder.codingPath
     }
     
+    @usableFromInline
     mutating func encodeNil() throws {
         if encoder.settings.encodeNilAsNull {
             encoder.writeNull()
         }
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Bool?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: String?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Double?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Float?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int8?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int16?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int32?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int64?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt8?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt16?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt32?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt64?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Bool) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: String) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Double) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Float) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int8) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int16) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int32) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int64) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt8) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt16) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt32) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt64) throws {
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         if try self.encoder.writeOtherValue(value) {
             return
         }
         
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         try value.encode(to: encoder)
     }
 }
@@ -804,157 +958,188 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     }
     var count = 0
     
+    @usableFromInline
     init(encoder: _JSONEncoder) {
         self.encoder = encoder
     }
     
+    @usableFromInline
     mutating func encodeNil() throws {
         if encoder.settings.encodeNilAsNull {
             encoder.writeComma()
             encoder.writeNull()
         }
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Bool?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: String?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Double?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Float?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int8?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int16?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int32?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: Int64?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt8?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt16?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt32?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
-
+    
+    @usableFromInline
     mutating func encodeIfPresent(_ value: UInt64?) throws {
         encoder.writeComma()
         encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Bool) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: String) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Double) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Float) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int8) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int16) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int32) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: Int64) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt8) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt16) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt32) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode(_ value: UInt64) throws {
         encoder.writeComma()
         self.encoder.writeValue(value)
     }
     
+    @usableFromInline
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         self.encoder.writeComma()
 
@@ -962,22 +1147,25 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
             return
         }
 
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         try value.encode(to: encoder)
     }
     
+    @usableFromInline
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         return encoder.container(keyedBy: keyType)
     }
     
+    @usableFromInline
     mutating func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
         self.encoder.writeComma()
-        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data, nesting: self.encoder.nesting + 1)
         return encoder.unkeyedContainer()
     }
     
+    @usableFromInline
     mutating func superEncoder() -> Encoder {
         return encoder
     }

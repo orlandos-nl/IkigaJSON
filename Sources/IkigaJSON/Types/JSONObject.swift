@@ -20,6 +20,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
     public internal(set) var jsonBuffer: ByteBuffer
     
     /// An internal index that keeps track of all values within this JSONObject
+    @usableFromInline
     var description: JSONDescription
     
     /// A textual (JSON formatted) representation of this JSONObject as `Foundation.Data`
@@ -97,6 +98,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
     }
     
     /// Creates a new JSONObject from an already indexes JSON blob as an optimization for nested objects
+
     @usableFromInline
     internal init(buffer: ByteBuffer, description: JSONDescription) {
         self.jsonBuffer = buffer
@@ -104,6 +106,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
     }
     
     /// Removed a value at a specified index and json offset
+
     @usableFromInline
     internal mutating func removeValue(index: Int, offset: Int) {
         let firstElement = index == 0

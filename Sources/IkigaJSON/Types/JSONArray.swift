@@ -16,6 +16,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
     public internal(set) var jsonBuffer: ByteBuffer
     
     /// An internal index that keeps track of all values within this JSONArray
+    @usableFromInline
     var description: JSONDescription
     
     /// A textual (JSON formatted) representation of this JSONArray as `Foundation.Data`
@@ -279,7 +280,7 @@ public struct JSONArrayIterator: IteratorProtocol {
     public let count: Int
     public var index = 0 {
         didSet {
-            assert(index >= 0 && index < count, "Invalid index")
+            assert(index >= 0, "Invalid index")
         }
     }
     

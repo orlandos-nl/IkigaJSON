@@ -91,49 +91,53 @@ final class IkigaJSONTests: XCTestCase {
     }
 
     func testArrayEncodingPerformance() throws {
-        let ikiga = IkigaJSONEncoder()
-        let foundation = JSONEncoder()
+        measure {
+            let ikiga = IkigaJSONEncoder()
+            let foundation = JSONEncoder()
 
-        let stringBytes = Array("Hello, world".utf8)
-        let string = String(bytes: stringBytes, encoding: .utf8)!
+            let stringBytes = Array("Hello, world".utf8)
+            let string = String(bytes: stringBytes, encoding: .utf8)!
 
-        let array = [String](repeating: string, count: 100_000)
+            let array = [String](repeating: string, count: 100_000)
 
-        let ikigaTimeSpent = try measureTime {
-            _ = try ikiga.encode(array)
+            let ikigaTimeSpent = try! measureTime {
+                _ = try ikiga.encode(array)
+            }
+
+            let foundationTimeSpent = try! measureTime {
+                _ = try foundation.encode(array)
+            }
+
+            XCTAssert(ikigaTimeSpent < foundationTimeSpent, "Ikiga spent \(ikigaTimeSpent - foundationTimeSpent) longer")
         }
-
-        let foundationTimeSpent = try measureTime {
-            _ = try foundation.encode(array)
-        }
-
-        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
 
     func testObjectEncodingPerformance() throws {
-        var ikiga = IkigaJSONEncoder()
-        ikiga.settings.bufferExpansionMode = .normal
-        ikiga.settings.expectedJSONSize = 2_000_000
-        let foundation = JSONEncoder()
+        measure {
+            var ikiga = IkigaJSONEncoder()
+            ikiga.settings.bufferExpansionMode = .normal
+            ikiga.settings.expectedJSONSize = 2_000_000
+            let foundation = JSONEncoder()
 
-        let stringBytes = Array("Hello, world".utf8)
-        let string = String(bytes: stringBytes, encoding: .utf8)!
+            let stringBytes = Array("Hello, world".utf8)
+            let string = String(bytes: stringBytes, encoding: .utf8)!
 
-        var dictionary = [String: String]()
+            var dictionary = [String: String]()
 
-        for i in 0..<100_000 {
-            dictionary[String(i)] = string
+            for i in 0..<100_000 {
+                dictionary[String(i)] = string
+            }
+
+            let ikigaTimeSpent = try! measureTime {
+                _ = try ikiga.encode(dictionary)
+            }
+
+            let foundationTimeSpent = try! measureTime {
+                _ = try foundation.encode(dictionary)
+            }
+
+            XCTAssert(ikigaTimeSpent < foundationTimeSpent, "Ikiga spent \(ikigaTimeSpent - foundationTimeSpent) longer")
         }
-
-        let ikigaTimeSpent = try measureTime {
-            _ = try ikiga.encode(dictionary)
-        }
-
-        let foundationTimeSpent = try measureTime {
-            _ = try foundation.encode(dictionary)
-        }
-
-        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
 
     func testAllEncoding() throws {

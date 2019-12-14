@@ -22,6 +22,7 @@ internal struct JSONParser {
     /// This description is where we write a binary format that describes the JSON data.
     ///
     /// It's made to be highly performant in parsing and slicing JSON
+    @usableFromInline
     internal var description: JSONDescription
     
     /// The amount of parsed bytes from the `pointer`. Also the first index we have to parse next since programmers start at 0

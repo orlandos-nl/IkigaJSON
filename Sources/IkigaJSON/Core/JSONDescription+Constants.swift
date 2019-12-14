@@ -1,3 +1,4 @@
+@usableFromInline
 enum Constants {
     /// Type byte + JSON location + JSON length + pair count + totalIndexLength
     ///

@@ -24,12 +24,14 @@ public struct JSONDescription {
     }
     
     /// Creates a new JSONDescription reserving 512 bytes by default.
+
     @usableFromInline
     init(size: Int = 512) {
         self.buffer = allocator.buffer(capacity: size)
     }
     
     /// Resets the used capacity which would enable reusing this description
+
     @usableFromInline
     mutating func recycle() {
         self.buffer.moveWriterIndex(to: 0)
@@ -37,11 +39,13 @@ public struct JSONDescription {
 }
 
 extension ByteBuffer {
+
     @usableFromInline
     mutating func removeBytes(atOffset offset: Int, oldSize: Int) {
         prepareForRewrite(atOffset: offset, oldSize: oldSize, newSize: 0)
     }
     
+
     @usableFromInline
     mutating func prepareForRewrite(atOffset offset: Int, oldSize: Int, newSize: Int) {
         // `if newSize == 5 && oldSize == 3` then We need to write over 0..<5
@@ -70,6 +74,7 @@ extension ByteBuffer {
         moveWriterIndex(to: writerIndex + diff)
     }
     
+
     @usableFromInline
     mutating func advance(at offset: Int, by value: Int32) {
         guard let old: Int32 = getInteger(at: offset) else {
@@ -87,6 +92,7 @@ extension JSONDescription {
     /// Inserts an object or array's JSONDescription and it's children into this one
     /// The supplied Int is the location where the value will be stored in JSON
     /// This will be used to update all locations in JSON accordingly
+
     @usableFromInline
     mutating func addNestedDescription(_ description: JSONDescription, at jsonOffset: Int32) {
         var description = description
@@ -95,6 +101,7 @@ extension JSONDescription {
     }
     
     /// Moves this index description and all it's child descriptions their JSON offsets forward
+
     @usableFromInline
     mutating func advanceAllJSONOffsets(by jsonOffset: Int32) {
         self.buffer.advance(at: Constants.jsonLocationOffset, by: jsonOffset)
@@ -107,11 +114,13 @@ extension JSONDescription {
         }
     }
     
+
     @usableFromInline
     var topLevelType: JSONType {
         return type(atOffset: 0)
     }
     
+
     @usableFromInline
     func arrayObjectCount() -> Int {
         assert(self.topLevelType == .array || self.topLevelType == .object)
@@ -123,6 +132,7 @@ extension JSONDescription {
         return Int(count)
     }
     
+
     @usableFromInline
     func type(atOffset offset: Int) -> JSONType {
         assert(offset < buffer.writerIndex)
@@ -134,6 +144,7 @@ extension JSONDescription {
         return type
     }
     
+
     @usableFromInline
     func indexLength(atOffset offset: Int) -> Int {
         // Force unwrap because this is all internal code, if this crashes JSON is broken
@@ -153,6 +164,7 @@ extension JSONDescription {
         }
     }
     
+
     @usableFromInline
     func skipIndex(atOffset offset: inout Int) {
         offset = offset &+ indexLength(atOffset: offset)
@@ -160,6 +172,7 @@ extension JSONDescription {
     
     /// Removes a key-value pair from object descriptions only.
     /// Removes both the key and the value from this description
+
     @usableFromInline
     mutating func removeObjectDescription(atKeyIndex keyOffset: Int, jsonOffset: Int, removedJSONLength: Int) {
         assert(topLevelType == .object)
@@ -201,6 +214,7 @@ extension JSONDescription {
     }
     
     /// Assumes `self` to be a description of a `JSONObject`
+
     @usableFromInline
     mutating func incrementObjectCount(jsonSize: Int32, atValueIndexOffset valueOffset: Int) {
         assert(topLevelType == .object)
@@ -218,6 +232,7 @@ extension JSONDescription {
     }
 
     /// Assumes `self` to be a description of a `JSONArray`
+
     @usableFromInline
     mutating func incrementArrayCount(jsonSize: Int32, atIndexOffset indexOffset: Int) {
         assert(topLevelType == .array)
@@ -233,6 +248,7 @@ extension JSONDescription {
         buffer.advance(at: Constants.arrayObjectPairCountOffset, by: 1)
     }
     
+
     @usableFromInline
     mutating func rewrite(buffer: inout ByteBuffer, to value: JSONValue, at indexOffset: Int) {
         let jsonBounds = self.jsonBounds(at: indexOffset)
@@ -322,6 +338,7 @@ extension JSONDescription {
         }
     }
     
+
     @usableFromInline
     mutating func addJSONSize(of size: Int32) {
         assert(topLevelType == .object || topLevelType == .object)
@@ -329,6 +346,7 @@ extension JSONDescription {
         buffer.advance(at: Constants.jsonLengthOffset, by: size)
     }
     
+
     @usableFromInline
     mutating func rewriteStringOrNumber(_ value: Bounds, type: JSONType, atIndexOffset offset: Int) {
         let oldSize = indexLength(atOffset: offset)
@@ -340,11 +358,13 @@ extension JSONDescription {
         buffer.setInteger(value.length, at: offset + Constants.jsonLengthOffset)
     }
     
+
     @usableFromInline
     mutating func rewriteNumber(_ number: Bounds, floatingPoint: Bool, atIndexOffset offset: Int) {
         rewriteStringOrNumber(number, type: floatingPoint ? .floatingNumber : .integer, atIndexOffset: offset)
     }
     
+
     @usableFromInline
     mutating func rewriteString(_ string: Bounds, escaped: Bool, atIndexOffset offset: Int) {
         rewriteStringOrNumber(string, type: escaped ? .stringWithEscaping : .string, atIndexOffset: offset)
@@ -359,21 +379,25 @@ extension JSONDescription {
         buffer.setInteger(jsonOffset, at: indexOffset + Constants.jsonLocationOffset)
     }
     
+
     @usableFromInline
     mutating func rewriteNull(atIndexOffset indexOffset: Int, jsonOffset: Int32) {
         rewriteShortType(to: .null, indexOffset: indexOffset, jsonOffset: jsonOffset)
     }
     
+
     @usableFromInline
     mutating func rewriteTrue(atIndexOffset offset: Int, jsonOffset: Int32) {
         rewriteShortType(to: .boolTrue, indexOffset: offset, jsonOffset: jsonOffset)
     }
     
+
     @usableFromInline
     mutating func rewriteFalse(atIndexOffset offset: Int, jsonOffset: Int32) {
         rewriteShortType(to: .boolFalse, indexOffset: offset, jsonOffset: jsonOffset)
     }
     
+
     @usableFromInline
     mutating func rewriteObjectArray(locallyAt localOffset: Int, from newDescription: JSONDescription) {
         let oldLength = self.indexLength(atOffset: localOffset)
@@ -384,6 +408,7 @@ extension JSONDescription {
         buffer.setBuffer(newDescription.buffer, at: localOffset)
     }
     
+
     @usableFromInline
     mutating func describeString(at stringBounds: Bounds, escaped: Bool) {
         let type: JSONType = escaped ? .stringWithEscaping : .string
@@ -393,6 +418,7 @@ extension JSONDescription {
         buffer.writeInteger(stringBounds.length)
     }
     
+
     @usableFromInline
     mutating func describeNumber(at number: Bounds, floatingPoint: Bool) {
         // Make a destinction between floating points and integers
@@ -405,24 +431,28 @@ extension JSONDescription {
         self.buffer.writeInteger(number.length)
     }
     
+
     @usableFromInline
     mutating func describeTrue(atJSONOffset jsonOffset: Int32) {
         buffer.writeInteger(JSONType.boolTrue.rawValue)
         buffer.writeInteger(jsonOffset)
     }
     
+
     @usableFromInline
     mutating func describeFalse(atJSONOffset jsonOffset: Int32) {
         buffer.writeInteger(JSONType.boolFalse.rawValue)
         buffer.writeInteger(jsonOffset)
     }
     
+
     @usableFromInline
     mutating func describeNull(atJSONOffset jsonOffset: Int32) {
         buffer.writeInteger(JSONType.null.rawValue)
         buffer.writeInteger(jsonOffset)
     }
     
+
     @usableFromInline
     mutating func describeArray(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
         let indexOffset = buffer.writerIndex
@@ -437,6 +467,7 @@ extension JSONDescription {
         )
     }
     
+
     @usableFromInline
     mutating func describeObject(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
         let indexOffset = buffer.writerIndex
@@ -451,6 +482,7 @@ extension JSONDescription {
         )
     }
     
+
     @usableFromInline
     mutating func complete(_ unfinished: UnfinishedDescription, withResult result: _ArrayObjectDescription) {
         buffer.setInteger(result.jsonByteCount, at: unfinished.indexOffset &+ Constants.jsonLengthOffset)
@@ -506,7 +538,7 @@ extension JSONDescription {
         
         return false
     }
-    
+
     func containsKey(
         _ key: String,
         convertingSnakeCasing: Bool,
@@ -516,7 +548,8 @@ extension JSONDescription {
     ) -> Bool {
         return valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: json) != nil
     }
-    
+
+    @usableFromInline
     func keyOffset(
         forKey key: String,
         convertingSnakeCasing: Bool,
@@ -554,7 +587,8 @@ extension JSONDescription {
         
         return nil
     }
-    
+
+    @usableFromInline
     func valueOffset(
         forKey key: String,
         convertingSnakeCasing: Bool,
@@ -571,7 +605,8 @@ extension JSONDescription {
         
         return (index, offset)
     }
-    
+
+    @usableFromInline
     func offset(forIndex index: Int) -> Int {
         assert(self.topLevelType == .array)
         var offset = Constants.firstArrayObjectChildOffset
@@ -581,7 +616,8 @@ extension JSONDescription {
         
         return offset
     }
-    
+
+    @usableFromInline
     func type(
         ofKey key: String,
         convertingSnakeCasing: Bool,
@@ -593,7 +629,7 @@ extension JSONDescription {
         
         return self.type(atOffset: offset)
     }
-    
+
     func keys(
         inPointer buffer: UnsafePointer<UInt8>,
         unicode: Bool,
@@ -628,7 +664,8 @@ extension JSONDescription {
         
         return keys
     }
-    
+
+    @usableFromInline
     func dataBounds(atIndexOffset indexOffset: Int) -> Bounds {
         let jsonOffset = self.jsonOffset(at: indexOffset)
         
@@ -655,7 +692,8 @@ extension JSONDescription {
             )
         }
     }
-    
+
+    @usableFromInline
     func jsonBounds(at indexOffset: Int) -> Bounds {
         let jsonOffset = self.jsonOffset(at: indexOffset)
         
@@ -694,7 +732,8 @@ extension JSONDescription {
         
         return offset
     }
-    
+
+    @usableFromInline
     func stringBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
         guard
             let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)
@@ -709,7 +748,8 @@ extension JSONDescription {
         
         return (bounds, type == .stringWithEscaping)
     }
-    
+
+    @usableFromInline
     func integerBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> Bounds? {
         guard
             let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)
@@ -722,7 +762,8 @@ extension JSONDescription {
         
         return dataBounds(atIndexOffset: offset)
     }
-    
+
+    @usableFromInline
     func floatingBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
         guard
             let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)

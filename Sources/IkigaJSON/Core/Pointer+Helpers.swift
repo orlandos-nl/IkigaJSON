@@ -56,6 +56,7 @@ extension UnsafePointer where Pointee == UInt8 {
 }
 
 extension ByteBuffer {
+    @usableFromInline
     func withBytePointer<T>(_ run: (UnsafePointer<UInt8>) throws -> T) rethrows -> T {
         return try withUnsafeReadableBytes { buffer in
             let buffer = buffer.bindMemory(to: UInt8.self)
