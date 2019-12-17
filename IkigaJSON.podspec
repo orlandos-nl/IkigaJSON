@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'IkigaJSON'
-  s.version          = '2.0.0'
+  s.version          = '2.0.3'
   s.summary          = 'A High performance JSON Codable implementation.'
 
   s.swift_version = '5.0'

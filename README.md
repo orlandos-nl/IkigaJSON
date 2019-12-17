@@ -4,16 +4,22 @@ IkigaJSON is a really fast JSON parser. It performed ~4x faster than Foundation 
 
 ### Adding the dependency
 
+The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use the 2.x versions of IkigaJSON.
+
 SPM:
 
 ```swift
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.1.0"),
+.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.0.0"),
+// Or, for SwiftNIO 2
+.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "2.0.0"),
 ```
 
 Cocoapods:
 
-```swift
-pod 'IkigaJSON', '>= 1.1'
+```cocoapods
+pod 'IkigaJSON', '~> 1.0'
+# Or, for SwiftNIO 2
+pod 'IkigaJSON', '~> 1.0'
 ```
 
 ### Usage
@@ -29,6 +35,49 @@ struct User: Codable {
 let data = Data()
 var decoder = IkigaJSONDecoder()
 let user = try decoder.decode(User.self, from: data)
+```
+
+### In Vapor 4
+
+Conform Ikiga to Vapor 4's protocols like so:
+
+```swift
+extension IkigaJSONEncoder: ContentEncoder {
+    public func encode<E: Encodable>(
+        _ encodable: E,
+        to body: inout ByteBuffer,
+        headers: inout HTTPHeaders
+    ) throws {
+        headers.contentType = .json
+        try self.encodeAndWrite(encodable, into: &body)
+    }
+}
+
+extension IkigaJSONDecoder: ContentDecoder {
+    public func decode<D: Decodable>(
+        _ decodable: D.Type,
+        from body: ByteBuffer,
+        headers: HTTPHeaders
+    ) throws -> D {
+        guard headers.contentType == .json || headers.contentType == .jsonAPI else {
+            throw Abort(.unsupportedMediaType)
+        }
+        
+        return try self.decode(D.self, from: body)
+    }
+}
+```
+
+Register the encoder/decoder to Vapor like so:
+
+```swift
+var decoder = IkigaJSONDecoder()
+decoder.settings.dateDecodingStrategy = .iso8601
+ContentConfiguration.global.use(decoder: decoder, for: .json)
+
+var encoder = IkigaJSONEncoder()
+encoder.settings.dateDecodingStrategy = .iso8601
+ContentConfiguration.global.use(encoder: encoder, for: .json)
 ```
 
 ### Raw JSON
@@ -84,11 +133,12 @@ By design you can build on top of any data storage as long as it exposes a point
 - Performance 🚀
 - Date/Data _encoding_ strategies
 - Raw JSON APIs (non-codable)
+- Codable decoding from `JSONObject` and `JSONArray`
+- `\u` escaped unicode characters
 
 TODO:
 
-- `\u` escaped unicode characters
-- Codable decoding from `JSONObject` and `JSONArray`
+- JSON error accumulation
 - Lightweight JSON inline comparison helpers
 
 ### Media

@@ -1,6 +1,7 @@
 import Foundation
 import NIO
 
+
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings {
     public init() {}
