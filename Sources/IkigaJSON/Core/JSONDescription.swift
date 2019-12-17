@@ -316,7 +316,7 @@ extension JSONDescription {
             length = Int32(_length)
             
             buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: _length)
-            buffer.set(buffer: object.jsonBuffer, at: Int(jsonBounds.offset))
+            buffer.setBuffer(object.jsonBuffer, at: Int(jsonBounds.offset))
             var newDescription = object.description
             newDescription.advanceAllJSONOffsets(by: jsonBounds.offset)
             rewriteObjectArray(locallyAt: indexOffset, from: newDescription)
@@ -325,7 +325,7 @@ extension JSONDescription {
             length = Int32(_length)
             
             buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: _length)
-            buffer.set(buffer: array.jsonBuffer, at: Int(jsonBounds.offset))
+            buffer.setBuffer(array.jsonBuffer, at: Int(jsonBounds.offset))
             var newDescription = array.description
             newDescription.advanceAllJSONOffsets(by: jsonBounds.offset)
             rewriteObjectArray(locallyAt: indexOffset, from: newDescription)
@@ -389,7 +389,7 @@ extension JSONDescription {
         
         buffer.prepareForRewrite(atOffset: localOffset, oldSize: oldLength, newSize: newLength)
         
-        buffer.set(buffer: newDescription.buffer, at: localOffset)
+        buffer.setBuffer(newDescription.buffer, at: localOffset)
     }
     
     mutating func describeString(at stringBounds: Bounds, escaped: Bool) {
