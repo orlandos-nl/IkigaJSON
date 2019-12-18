@@ -246,6 +246,26 @@ final class IkigaJSONTests: XCTestCase {
             testSecond(against: object["d"].object?["b"]?.object)
         }
     }
+    
+    func testMissEncode() throws {
+        struct Unencoded: Encodable {
+            enum CodingKeys: String, CodingKey {
+                case test
+            }
+            
+            struct SubEncodable: Encodable {
+                func encode(to encoder: Encoder) throws {}
+            }
+            
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(SubEncodable(), forKey: .test)
+            }
+        }
+
+        let encoded = try IkigaJSONEncoder().encode(Unencoded())
+        XCTAssertEqual(String(data: encoded, encoding: .utf8), "{}")
+    }
 
     func testEncodeInt() throws {
         struct Test: Codable {

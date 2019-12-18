@@ -641,7 +641,7 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         }
 
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
-        encoded.beforeWrite = (key.stringValue, self.encoder.didWriteValue)
+        encoder.beforeWrite = (key.stringValue, self.encoder.didWriteValue)
         try value.encode(to: encoder)
     }
     
