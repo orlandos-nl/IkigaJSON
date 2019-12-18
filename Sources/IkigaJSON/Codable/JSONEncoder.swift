@@ -295,13 +295,13 @@ fileprivate final class _JSONEncoder: Encoder {
         if let (key, comma) = beforeWrite {
             if comma {
                 data.insert(.comma, at: &offset)
+                self.didWriteValue = true
             }
             
             _writeValue(key)
             data.insert(.colon, at: &offset)
             
             beforeWrite = nil
-            self.didWriteValue = true
         }
     }
     
