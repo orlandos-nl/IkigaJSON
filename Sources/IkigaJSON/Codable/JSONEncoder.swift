@@ -301,6 +301,8 @@ fileprivate final class _JSONEncoder: Encoder {
             data.insert(.colon, at: &offset)
             beforeWrite = nil
         }
+        
+        self.didWriteValue = true
     }
     
     func singleValueContainer() -> SingleValueEncodingContainer {
