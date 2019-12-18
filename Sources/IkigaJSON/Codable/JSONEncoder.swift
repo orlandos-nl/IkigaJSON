@@ -837,7 +837,7 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.beforeWrite = self.encoder.beforeWrite
-        encoded.didWriteValue = self.encoded.didWriteValue
+        encoder.didWriteValue = self.encoder.didWriteValue
         try value.encode(to: encoder)
         if encoder.didWriteValue {
             self.encoder.didWriteValue = true
@@ -1012,7 +1012,7 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.beforeWrite = self.encoder.beforeWrite
-        encoded.didWriteValue = self.encoded.didWriteValue
+        encoder.didWriteValue = self.encoder.didWriteValue
         try value.encode(to: encoder)
         if encoder.didWriteValue {
             self.encoder.didWriteValue = true
