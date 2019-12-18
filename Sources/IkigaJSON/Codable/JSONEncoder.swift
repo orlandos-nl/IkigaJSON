@@ -676,6 +676,9 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.beforeWrite = (key.stringValue, self.encoder.didWriteValue)
         try value.encode(to: encoder)
+        if encoder.didWriteValue {
+            self.encoder.didWriteValue = true
+        }
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
@@ -831,7 +834,11 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
         }
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        encoder.beforeWrite = self.encoder.beforeWrite
         try value.encode(to: encoder)
+        if encoder.didWriteValue {
+            self.encoder.didWriteValue = true
+        }
     }
 }
 
@@ -1001,7 +1008,11 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
         }
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        encoder.beforeWrite = self.encoder.beforeWrite
         try value.encode(to: encoder)
+        if encoder.didWriteValue {
+            self.encoder.didWriteValue = true
+        }
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
