@@ -681,12 +681,14 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
+        encoder.beforeWrite = self.encoder.beforeWrite
         return encoder.container(keyedBy: keyType)
     }
     
     mutating func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
         self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
+        encoder.beforeWrite = self.encoder.beforeWrite
         return encoder.unkeyedContainer()
     }
     
