@@ -227,6 +227,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     var end: UInt8?
     var didWriteValue = false
+    var beforeWrite: (key: String, comma: Bool)? = nil
     var userInfo: [CodingUserInfoKey : Any]
     var settings: JSONEncoderSettings
     
@@ -252,6 +253,14 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
+        if let (key, comma) = beforeWrite {
+            if comma {
+                self.data.insert(.comma, at: &offset)
+            }
+            writeValue(key)
+            self.beforeWrite = nil
+        }
+        
         data.insert(.curlyLeft, at: &offset)
         end = .curlyRight
         
@@ -260,6 +269,14 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func unkeyedContainer() -> UnkeyedEncodingContainer {
+        if let (key, comma) = beforeWrite {
+            if comma {
+                self.data.insert(.comma, at: &offset)
+            }
+            writeValue(key)
+            self.beforeWrite = nil
+        }
+        
         data.insert(.squareLeft, at: &offset)
         end = .squareRight
         
@@ -345,6 +362,14 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func writeComma() {
+        if let (key, comma) = beforeWrite {
+            if comma {
+                self.data.insert(.comma, at: &offset)
+            }
+            writeValue(key)
+            self.beforeWrite = nil
+        }
+        
         if didWriteValue {
             data.insert(.comma, at: &offset)
         } else {
@@ -611,13 +636,12 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
-        self.encoder.writeKey(key.stringValue)
-
         if try self.encoder.writeOtherValue(value) {
             return
         }
 
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, settings: self.encoder.settings, data: self.encoder.data)
+        encoded.beforeWrite = (key.stringValue, self.encoder.didWriteValue)
         try value.encode(to: encoder)
     }
     
@@ -654,7 +678,8 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
         }
     }
 
-    mutating func encodeIfPresent(_ value: Bool?) throws {encoder.writeComma()
+    mutating func encodeIfPresent(_ value: Bool?) throws {
+        encoder.writeComma()
         encoder.writeValue(value)
     }
 
