@@ -203,7 +203,7 @@ final class IkigaJSONTests: XCTestCase {
 
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = false
-            let object = try encoder.encodeJSONObject(from: test)
+            var object = try encoder.encodeJSONObject(from: test)
 
             XCTAssertEqual(object.keys, ["a", "p", "d"])
 
@@ -236,7 +236,7 @@ final class IkigaJSONTests: XCTestCase {
 
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = true
-            let object = try encoder.encodeJSONObject(from: test)
+            var object = try encoder.encodeJSONObject(from: test)
 
             XCTAssertEqual(object.keys, ["a", "p", "d"])
 
