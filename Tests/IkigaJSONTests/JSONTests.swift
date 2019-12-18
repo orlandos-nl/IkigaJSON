@@ -260,7 +260,7 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testEncodeJSONArray() throws {
-        struct Test: Codable {
+        struct Test: Codable, Equatable {
             let yes: String
             let bug: String
             let awesome: [Bool]
@@ -287,6 +287,13 @@ final class IkigaJSONTests: XCTestCase {
             XCTAssertEqual(object["awesome"].array?[0].bool, true)
             XCTAssertEqual(object["flag"].string, "UK")
         }
+        
+        let testsCopy = try JSONDecoder().decode([Test].self, from: array.data)
+        XCTAssertEqual(testsCopy, tests)
+        
+        let testData = try newEncoder.encode(test)
+        let testCopy = try JSONDecoder().decode(Test.self, from: testData)
+        XCTAssertEqual(test, testCopy)
     }
     
     func testDecodeJSONObject() throws {
