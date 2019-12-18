@@ -275,8 +275,7 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
-        onBeforeWrite()
-        
+        applyBeforeWriteKey()
         data.insert(.curlyLeft, at: &offset)
         end = .curlyRight
         
@@ -285,12 +284,23 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func unkeyedContainer() -> UnkeyedEncodingContainer {
-        onBeforeWrite()
-        
+        applyBeforeWriteKey()
         data.insert(.squareLeft, at: &offset)
         end = .squareRight
         
         return UnkeyedJSONEncodingContainer(encoder: self)
+    }
+    
+    func applyBeforeWriteKey() {
+        if let (key, comma) = beforeWrite {
+            if comma {
+                data.insert(.comma, at: &offset)
+            }
+            
+            _writeValue(key)
+            data.insert(.colon, at: &offset)
+            beforeWrite = nil
+        }
     }
     
     func singleValueContainer() -> SingleValueEncodingContainer {
@@ -304,23 +314,28 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func writeValue(_ string: String) {
+        applyBeforeWriteKey()
         _writeValue(string)
     }
     
     func writeNull() {
+        applyBeforeWriteKey()
         data.insert(contentsOf: nullBytes, at: &offset)
     }
     
     func writeValue(_ value: Bool) {
+        applyBeforeWriteKey()
         data.insert(contentsOf: value ? boolTrue : boolFalse, at: &offset)
     }
     
     func writeValue(_ value: Double) {
+        applyBeforeWriteKey()
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
     }
     
     func writeValue(_ value: Float) {
+        applyBeforeWriteKey()
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
     }
@@ -335,15 +350,15 @@ fileprivate final class _JSONEncoder: Encoder {
             case .deferredToDate:
                 return false
             case .secondsSince1970:
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 writeValue(date.timeIntervalSince1970)
             case .millisecondsSince1970:
-                onBeforeWrite()
+            applyBeforeWriteKey()
                 key.map(writeKey)
                 writeValue(date.timeIntervalSince1970 * 1000)
             case .iso8601:
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 let string: String
                 
@@ -355,11 +370,11 @@ fileprivate final class _JSONEncoder: Encoder {
                 
                 writeValue(string)
             case .formatted(let formatter):
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 writeValue(formatter.string(from: date))
             case .custom(let custom):
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(date, encoder)
@@ -373,11 +388,11 @@ fileprivate final class _JSONEncoder: Encoder {
             case .deferredToData:
                 return false
             case .base64:
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 writeValue(data.base64EncodedString())
             case .custom(let custom):
-                onBeforeWrite()
+                applyBeforeWriteKey()
                 key.map(writeKey)
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(data, encoder)
@@ -391,20 +406,7 @@ fileprivate final class _JSONEncoder: Encoder {
         }
     }
     
-    func onBeforeWrite() {
-        if let (key, comma) = beforeWrite {
-            if comma {
-                self.data.insert(.comma, at: &offset)
-            }
-            writeValue(key)
-            data.insert(.colon, at: &offset)
-            self.beforeWrite = nil
-        }
-    }
-    
     func writeComma() {
-        onBeforeWrite()
-        
         if didWriteValue {
             data.insert(.comma, at: &offset)
         } else {
@@ -670,7 +672,7 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         if try self.encoder.writeOtherValue(value, forKey: key.stringValue) {
             return
         }
-
+        
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.beforeWrite = (key.stringValue, self.encoder.didWriteValue)
         try value.encode(to: encoder)
@@ -705,153 +707,123 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
     
     mutating func encodeNil() throws {
         if encoder.settings.encodeNilAsNull {
-            encoder.onBeforeWrite()
             encoder.writeNull()
         }
     }
-
-    mutating func encodeIfPresent(_ value: Bool?) throws {
-        encoder.onBeforeWrite()
+    
+    mutating func encodeIfPresent(_ value: Bool?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: String?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: String?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Double?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Double?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Float?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Float?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Int?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Int?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Int8?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Int8?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Int16?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Int16?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Int32?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Int32?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: Int64?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: Int64?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: UInt?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: UInt?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: UInt8?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: UInt8?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: UInt16?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: UInt16?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: UInt32?) throws {
-        encoder.onBeforeWrite()
+    mutating func encodeIfPresent(_ value: UInt32?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
-    mutating func encodeIfPresent(_ value: UInt64?) throws {
+    mutating func encodeIfPresent(_ value: UInt64?) throws {encoder.writeComma()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Bool) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: String) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Double) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Float) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Int) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Int8) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Int16) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Int32) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: Int64) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: UInt) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: UInt8) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: UInt16) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: UInt32) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode(_ value: UInt64) throws {
-        encoder.onBeforeWrite()
         encoder.writeValue(value)
     }
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
-        encoder.onBeforeWrite()
-        
         if try self.encoder.writeOtherValue(value) {
             return
         }
