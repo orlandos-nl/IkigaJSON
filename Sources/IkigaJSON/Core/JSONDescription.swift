@@ -55,10 +55,11 @@ extension ByteBuffer {
         if remainder > 0 {
             self.withUnsafeMutableReadableBytes { buffer in
                 let pointer = buffer.baseAddress!
-                let source = pointer + endIndex
-                let destination = pointer + offset
                 
-                memmove(destination, source, remainder) 
+                let source = pointer + endIndex
+                let destination = source + diff
+                
+                memmove(destination, source, remainder)
             }
         }
         

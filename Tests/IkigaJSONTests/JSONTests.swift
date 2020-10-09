@@ -42,6 +42,22 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode([String].self, from: json))
     }
     
+    func testInlineEditing() throws {
+        struct Test: Codable {
+            let yes: String
+        }
+        
+        var object = JSONObject()
+        object["yes"] = "a"
+        object["yes"] = "ab"
+        object["yes"] = "abc"
+        object["yes"] = "ab"
+        object["yes"] = "b"
+        
+        let test = try Foundation.JSONDecoder().decode(Test.self, from: object.data)
+        XCTAssertEqual(test.yes, "b")
+    }
+    
     func testEncodeJSONObject() throws {
         struct Test: Codable {
             let yes: String
