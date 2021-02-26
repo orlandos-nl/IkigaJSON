@@ -228,7 +228,7 @@ extension JSONParser {
                 var backwardsOffset = currentIndex &- 1
                 
                 // Every escaped character can have another escaped character
-                escapeLoop: while backwardsOffset > 1 {
+                escapeLoop: while backwardsOffset >= 1 {
                     defer { backwardsOffset = backwardsOffset &- 1 }
                     
                     if pointer[backwardsOffset] == .backslash {

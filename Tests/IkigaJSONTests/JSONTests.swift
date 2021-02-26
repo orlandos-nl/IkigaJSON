@@ -58,6 +58,16 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(test.yes, "b")
     }
     
+    func testBackslashWorks() throws {
+        let string = #"""
+        {
+            "\\hi": "\\\""
+        }
+        """#.data(using: .utf8)!
+        
+        XCTAssertNoThrow(try JSONObject(data: string))
+    }
+    
     func testEncodeJSONObject() throws {
         struct Test: Codable {
             let yes: String
