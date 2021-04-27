@@ -229,7 +229,7 @@ final class IkigaJSONTests: XCTestCase {
 
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = false
-            let object = try encoder.encodeJSONObject(from: test)
+            var object = try encoder.encodeJSONObject(from: test)
 
             XCTAssertEqual(object.keys, ["a", "p", "d"])
 
@@ -262,7 +262,7 @@ final class IkigaJSONTests: XCTestCase {
 
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = true
-            let object = try encoder.encodeJSONObject(from: test)
+            var object = try encoder.encodeJSONObject(from: test)
 
             XCTAssertEqual(object.keys, ["a", "p", "d"])
 
@@ -1046,6 +1046,26 @@ final class IkigaJSONTests: XCTestCase {
         json = try encoder.encodeJSONObject(from: instance)
         let result = formatter.string(from: instance.date)
         XCTAssertEqual(json["date"].string, result)
+    }
+    
+    func testIkigaJSONEncoder() throws {
+        struct NestedBlob: Codable, Equatable {
+            let int: Int?
+        }
+        
+        struct Blob: Codable, Equatable {
+            let a: String
+            let b: Int
+            let c: Bool
+            let d: Date
+            let e: Double
+            let f: NestedBlob
+        }
+        
+        let blob = Blob(a: "hello", b: 41, c: true, d: Date(), e: 3.14, f: NestedBlob(int: 14))
+        let json = try IkigaJSONEncoder().encode(blob)
+        let blob2 = try JSONDecoder().decode(Blob.self, from: json)
+        XCTAssertEqual(blob, blob2)
     }
 
     func testNestedObjectInObjectAccess() {
