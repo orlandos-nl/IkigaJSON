@@ -274,6 +274,10 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key : CodingKey {
+        if didWriteValue {
+            data.insert(.comma, at: &offset)
+        }
+        
         data.insert(.curlyLeft, at: &offset)
         end = .curlyRight
         
@@ -282,6 +286,10 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func unkeyedContainer() -> UnkeyedEncodingContainer {
+        if didWriteValue {
+            data.insert(.comma, at: &offset)
+        }
+        
         data.insert(.squareLeft, at: &offset)
         end = .squareRight
         
@@ -981,9 +989,9 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
         if try self.encoder.writeOtherValue(value) {
             return
         }
-
+        
+        self.encoder.writeComma()
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
-        encoder.didWriteValue = self.encoder.didWriteValue
         try value.encode(to: encoder)
         if encoder.didWriteValue {
             self.encoder.didWriteValue = true
