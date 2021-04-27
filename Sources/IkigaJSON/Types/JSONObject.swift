@@ -251,9 +251,6 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
             
             let oldSize = jsonBuffer.writerIndex
             
-            // Note where the key is located
-            let keyIndexOffset = description.buffer.writerIndex
-            
             // If this is not the first entry, a comma has to preceed this pair
             if reader.arrayObjectCount() > 0 {
                 jsonBuffer.writeInteger(UInt8.comma)
