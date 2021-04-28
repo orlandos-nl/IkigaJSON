@@ -141,6 +141,13 @@ final class SharedEncoderData {
     }
     
     /// Inserts the other autdeallocated storage into this storage
+    func insert(contentsOf data: [UInt8], at offset: inout Int) {
+        beforeWrite(offset: offset, count: data.count)
+        self.pointer.advanced(by: offset).assign(from: data, count: data.count)
+        offset = offset &+ data.count
+    }
+    
+    /// Inserts the other autdeallocated storage into this storage
     func insert(contentsOf storage: StaticString, at offset: inout Int) {
         beforeWrite(offset: offset, count: storage.utf8CodeUnitCount)
         self.pointer.advanced(by: offset).assign(from: storage.utf8Start, count: storage.utf8CodeUnitCount)
@@ -302,7 +309,7 @@ fileprivate final class _JSONEncoder: Encoder {
     
     func writeValue(_ string: String) {
         data.insert(.quote, at: &offset)
-        data.insert(contentsOf: string, at: &offset)
+        data.insert(contentsOf: string.escaped.1, at: &offset)
         data.insert(.quote, at: &offset)
     }
     
@@ -354,7 +361,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(date, encoder)
             @unknown default:
-                throw JSONError.unknownJSONStrategy
+                throw JSONParserError.unknownJSONStrategy
             }
 
             return true
@@ -369,7 +376,7 @@ fileprivate final class _JSONEncoder: Encoder {
                 let encoder = _JSONEncoder(codingPath: codingPath, userInfo: userInfo, data: self.data)
                 try custom(data, encoder)
             @unknown default:
-                throw JSONError.unknownJSONStrategy
+                throw JSONParserError.unknownJSONStrategy
             }
 
             return true

@@ -52,7 +52,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence {
         }
         
         guard description.topLevelType == .array else {
-            throw JSONError.expectedObject
+            throw JSONParserError.expectedObject
         }
     }
     

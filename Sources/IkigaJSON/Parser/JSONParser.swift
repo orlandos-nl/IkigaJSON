@@ -48,7 +48,7 @@ internal struct JSONParser {
     /// Throws an error if the count is 0
     private func assertMoreData() throws {
         guard hasMoreData else {
-            throw JSONError.missingData
+            throw JSONParserError.missingData
         }
     }
     

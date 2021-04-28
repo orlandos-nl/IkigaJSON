@@ -68,6 +68,13 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertNoThrow(try JSONObject(data: string))
     }
     
+    func testEncodeDictionary() throws {
+        let dict: [String: String] = ["hemail": "nova@helixbooking.com"]
+        let object = try IkigaJSONEncoder().encode(dict)
+        let dict2 = try JSONDecoder().decode([String: String].self, from: object)
+        XCTAssertEqual(dict, dict2)
+    }
+    
     func testEncodeJSONObject() throws {
         struct Test: Codable {
             let yes: String
@@ -283,6 +290,17 @@ final class IkigaJSONTests: XCTestCase {
         let value = Test(yes: 3)
         let object = try IkigaJSONEncoder().encodeJSONObject(from: value)
         XCTAssertEqual(object["yes"].int, 3)
+    }
+    
+    func testEncodeEscaping() throws {
+        struct Test: Codable, Equatable {
+            let yes: String
+        }
+        
+        let test = Test(yes: "\n")
+        let json = try IkigaJSONEncoder().encode(test)
+        let test2 = try JSONDecoder().decode(Test.self, from: json)
+        XCTAssertEqual(test, test2)
     }
     
     func testEncodeJSONArray() throws {

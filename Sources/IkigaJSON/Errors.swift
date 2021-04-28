@@ -1,5 +1,5 @@
-internal enum JSONError: Error {
-    enum Reason {
+public enum JSONParserError: Error {
+    public enum Reason {
         case expectedObjectKey
         case expectedObjectClose
         case expectedTopLevelObject

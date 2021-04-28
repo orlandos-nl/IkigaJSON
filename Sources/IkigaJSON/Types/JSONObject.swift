@@ -63,7 +63,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
         }
         
         guard description.topLevelType == .object else {
-            throw JSONError.expectedObject
+            throw JSONParserError.expectedObject
         }
     }
     
