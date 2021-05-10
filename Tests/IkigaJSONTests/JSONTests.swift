@@ -42,6 +42,45 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode([String].self, from: json))
     }
     
+    func testEncodeNilAsNull() throws {
+        struct Key: CodingKey {
+            var stringValue: String
+            var intValue: Int?
+            
+            init(stringValue: String) {
+                self.stringValue = stringValue
+            }
+            
+            init(intValue: Int) {
+                self.intValue = intValue
+                self.stringValue = String(intValue)
+            }
+        }
+        
+        struct Test: Encodable {
+            let encodeValue: Bool
+            
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: Key.self)
+                let value: String? = encodeValue ? "hi" : nil
+                try container.encodeIfPresent(value, forKey: .init(stringValue: "hi"))
+            }
+        }
+        
+        var encoder = IkigaJSONEncoder()
+        encoder.settings.encodeNilAsNull = true
+        
+        let valueObject = try encoder.encodeJSONObject(from: Test(encodeValue: true))
+        let nullValueObject = try encoder.encodeJSONObject(from: Test(encodeValue: false))
+        
+        encoder.settings.encodeNilAsNull = false
+        let emptyObject = try encoder.encodeJSONObject(from: Test(encodeValue: false))
+        
+        XCTAssertEqual(valueObject["hi"].string, "hi")
+        XCTAssertNotNil(nullValueObject["hi"].null)
+        XCTAssertNil(emptyObject["hi"].null)
+    }
+    
     func testInlineEditing() throws {
         struct Test: Codable {
             let yes: String
