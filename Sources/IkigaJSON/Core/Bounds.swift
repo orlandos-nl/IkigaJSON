@@ -43,7 +43,7 @@ internal struct Bounds {
         if escaping || unicode {
             // JSON strings are surrounded by `""`
             var length = Int(self.length) - 2
-            var i = 1
+            var i = 0
             
             next: while i < length {
                 defer {

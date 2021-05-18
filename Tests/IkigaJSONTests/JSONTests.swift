@@ -114,6 +114,48 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(dict, dict2)
     }
     
+    func testFoundationCompatibleDataEncoding() throws {
+        struct UploadRequest: Codable, Equatable {
+           public var filename: String
+           public var data: Data
+        }
+        
+        let json = UploadRequest(filename: "Hello.jpeg", data: Data(repeating: 0x01, count: 5))
+        let data = try IkigaJSONEncoder().encode(json)
+        let json2 = try JSONDecoder().decode(UploadRequest.self, from: data)
+        
+        XCTAssertEqual(json, json2)
+    }
+    
+    func testAndrewDataDecoding() throws {
+        struct UploadRequest: Codable, Equatable {
+           public var filename: String
+           public var data: Data
+        }
+        
+        let data = #"""
+        {
+            "filename": "Hello.jpeg",
+            "data": "\/9j\/4AAQSkZJRgAB"
+        }
+        """#.data(using: .utf8)!
+        
+        XCTAssertNoThrow(try IkigaJSONDecoder().decode(UploadRequest.self, from: data))
+    }
+    
+    func testFoundationCompatibleDataDecoding() throws {
+        struct UploadRequest: Codable, Equatable {
+           public var filename: String
+           public var data: Data
+        }
+        
+        let json = UploadRequest(filename: "Hello.jpeg", data: Data(repeating: 0x01, count: 5))
+        let data = try JSONEncoder().encode(json)
+        let json2 = try IkigaJSONDecoder().decode(UploadRequest.self, from: data)
+        
+        XCTAssertEqual(json, json2)
+    }
+    
     func testEncodeJSONObject() throws {
         struct Test: Codable {
             let yes: String
