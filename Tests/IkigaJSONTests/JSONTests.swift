@@ -99,9 +99,9 @@ final class IkigaJSONTests: XCTestCase {
     
     func testBackslashWorks() throws {
         let string = #"""
-        {
+            {
             "\\hi": "\\\""
-        }
+            }
         """#.data(using: .utf8)!
         
         XCTAssertNoThrow(try JSONObject(data: string))
@@ -116,8 +116,8 @@ final class IkigaJSONTests: XCTestCase {
     
     func testFoundationCompatibleDataEncoding() throws {
         struct UploadRequest: Codable, Equatable {
-           public var filename: String
-           public var data: Data
+            public var filename: String
+            public var data: Data
         }
         
         let json = UploadRequest(filename: "Hello.jpeg", data: Data(repeating: 0x01, count: 5))
@@ -127,26 +127,42 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(json, json2)
     }
     
-    func testAndrewDataDecoding() throws {
+    func testImageDataDecoding() throws {
         struct UploadRequest: Codable, Equatable {
-           public var filename: String
-           public var data: Data
+            public var filename: String
+            public var data: Data
         }
         
-        let data = #"""
+        let data = """
         {
             "filename": "Hello.jpeg",
-            "data": "\/9j\/4AAQSkZJRgAB"
+            "data": "\\/9j\\/4AAQSkZJRg\\/B"
         }
-        """#.data(using: .utf8)!
+        """.data(using: .utf8)!
+        
+        XCTAssertNoThrow(try IkigaJSONDecoder().decode(UploadRequest.self, from: data))
+    }
+    
+    func testAndrewDataDecoding() throws {
+        struct UploadRequest: Codable, Equatable {
+            public var filename: String
+            public var data: Data
+        }
+        
+        let data = """
+        {
+            "filename": "Hello.jpeg",
+            "data": "\\/9j\\/4AAQSkZJRgAB"
+        }
+        """.data(using: .utf8)!
         
         XCTAssertNoThrow(try IkigaJSONDecoder().decode(UploadRequest.self, from: data))
     }
     
     func testFoundationCompatibleDataDecoding() throws {
         struct UploadRequest: Codable, Equatable {
-           public var filename: String
-           public var data: Data
+            public var filename: String
+            public var data: Data
         }
         
         let json = UploadRequest(filename: "Hello.jpeg", data: Data(repeating: 0x01, count: 5))
@@ -174,82 +190,82 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(object["awesome"].array?[0].bool, true)
         XCTAssertEqual(object["flag"].string, "UK")
     }
-
+    
     func testEncodeNil() throws {
         struct Test: Codable {
             let yes: Int?
         }
-
+        
         let value = Test(yes: 3)
         let noValue = Test(yes: nil)
-
+        
         var encoder = IkigaJSONEncoder()
         var object = try encoder.encodeJSONObject(from: value)
         XCTAssertEqual(object["yes"].int, 3)
-
+        
         object = try encoder.encodeJSONObject(from: noValue)
         XCTAssertFalse(object["yes"] is NSNull)
         XCTAssertFalse(object.keys.contains("yes"))
-
+        
         encoder.settings.encodeNilAsNull = true
-
+        
         object = try encoder.encodeJSONObject(from: noValue)
         XCTAssert(object["yes"] is NSNull)
         XCTAssert(object.keys.contains("yes"))
     }
-
+    
     private func measureTime(run block: () throws -> ()) rethrows -> TimeInterval {
         let date = Date()
         try block()
         return Date().timeIntervalSince(date)
     }
-
+    
     func testArrayEncodingPerformance() throws {
         let ikiga = IkigaJSONEncoder()
         let foundation = JSONEncoder()
-
+        
         let stringBytes = Array("Hello, world".utf8)
         let string = String(bytes: stringBytes, encoding: .utf8)!
-
+        
         let array = [String](repeating: string, count: 100_000)
-
+        
         let ikigaTimeSpent = try measureTime {
             _ = try ikiga.encode(array)
         }
-
+        
         let foundationTimeSpent = try measureTime {
             _ = try foundation.encode(array)
         }
-
+        
         XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
-
+    
     func testObjectEncodingPerformance() throws {
         var ikiga = IkigaJSONEncoder()
         ikiga.settings.bufferExpansionMode = .normal
         ikiga.settings.expectedJSONSize = 2_000_000
         let foundation = JSONEncoder()
-
+        
         let stringBytes = Array("Hello, world".utf8)
         let string = String(bytes: stringBytes, encoding: .utf8)!
-
+        
         var dictionary = [String: String]()
-
+        
         for i in 0..<100_000 {
             dictionary[String(i)] = string
         }
-
+        
         let ikigaTimeSpent = try measureTime {
             _ = try ikiga.encode(dictionary)
         }
-
+        
         let foundationTimeSpent = try measureTime {
             _ = try foundation.encode(dictionary)
         }
-
+        
         XCTAssert(ikigaTimeSpent < foundationTimeSpent)
     }
-
+    
     func testAllEncoding() throws {
         struct AllPrimitives: Codable {
             var s: String
@@ -267,7 +283,7 @@ final class IkigaJSONTests: XCTestCase {
             var u16: UInt16
             var u32: UInt32
             var u64: UInt64
-
+            
             var os: String?
             var of: Float?
             var od: Double?
@@ -284,90 +300,90 @@ final class IkigaJSONTests: XCTestCase {
             var ou32: UInt32?
             var ou64: UInt64?
         }
-
+        
         struct Test: Codable {
             var a: [AllPrimitives]
             var p: AllPrimitives
             var d: [String: AllPrimitives]
         }
-
+        
         let primitives = AllPrimitives(s: "s", f: 3.1, d: 4.2, b: true, b2: false, i: 5, i8: 89, i16: -7667, i32: -889, i64: 123123213, u: 0x54, u8: 213, u16: 51, u32: 231, u64: 513, os: nil, of: nil, od: nil, ob: nil, ob2: nil, oi: nil, oi8: nil, oi16: nil, oi32: nil, oi64: nil, ou: nil, ou8: nil, ou16: nil, ou32: nil, ou64: nil)
         let primitives2 = AllPrimitives(s: "s", f: 3.1, d: 4.2, b: true, b2: false, i: 5, i8: 89, i16: -7667, i32: -889, i64: 123123213, u: 0x54, u8: 213, u16: 51, u32: 231, u64: 513, os: "s", of: 3.1, od: 4.2, ob: true, ob2: false, oi: -123, oi8: 12, oi16: -611, oi32: 1231512, oi64: 62341, ou: 3152113, ou8: 51, ou16: 314, ou32: 21321, ou64: 15334123441)
-
+        
         let test = Test(a: [primitives, primitives2], p: primitives, d: ["a": primitives, "b": primitives2])
-
+        
         func objectNil() throws {
             func testFirst(against object: JSONObject?) {
                 guard let object = object else {
                     XCTFail()
                     return
                 }
-
+                
                 XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64"])
             }
-
+            
             func testSecond(against object: JSONObject?) {
                 guard let object = object else {
                     XCTFail()
                     return
                 }
-
+                
                 XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
             }
-
+            
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = false
             var object = try encoder.encodeJSONObject(from: test)
-
+            
             XCTAssertEqual(object.keys, ["a", "p", "d"])
-
+            
             testFirst(against: object["a"].array?[0].object)
             testFirst(against: object["p"].object)
             testFirst(against: object["d"].object?["a"]?.object)
-
+            
             testSecond(against: object["a"].array?[1].object)
             testSecond(against: object["d"].object?["b"]?.object)
         }
-
+        
         func objectNull() throws {
             func testFirst(against object: JSONObject?) {
                 guard let object = object else {
                     XCTFail()
                     return
                 }
-
+                
                 XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
             }
-
+            
             func testSecond(against object: JSONObject?) {
                 guard let object = object else {
                     XCTFail()
                     return
                 }
-
+                
                 XCTAssertEqual(object.keys, ["s", "f", "d", "b", "b2", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "os", "of", "od", "ob", "ob2", "oi", "oi8", "oi16", "oi32", "oi64", "ou", "ou8", "ou16", "ou32", "ou64"])
             }
-
+            
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = true
             var object = try encoder.encodeJSONObject(from: test)
-
+            
             XCTAssertEqual(object.keys, ["a", "p", "d"])
-
+            
             testFirst(against: object["a"].array?[0].object)
             testFirst(against: object["p"].object)
             testFirst(against: object["d"].object?["a"]?.object)
-
+            
             testSecond(against: object["a"].array?[1].object)
             testSecond(against: object["d"].object?["b"]?.object)
         }
     }
-
+    
     func testEncodeInt() throws {
         struct Test: Codable {
             let yes: Int
         }
-
+        
         let value = Test(yes: 3)
         let object = try IkigaJSONEncoder().encodeJSONObject(from: value)
         XCTAssertEqual(object["yes"].int, 3)
@@ -889,66 +905,66 @@ final class IkigaJSONTests: XCTestCase {
             "awesome": true,
             "superAwesome": false
         ]
-
+        
         XCTAssertEqual(object["awesome"] as? Bool, true)
         XCTAssertEqual(object["superAwesome"] as? Bool, false)
-
+        
         object["awesome"] = nil
-
+        
         XCTAssertEqual(object["awesome"] as? Bool, nil)
         XCTAssertEqual(object["superAwesome"] as? Bool, false)
-
+        
         object["awesome"] = true
-
+        
         XCTAssertEqual(object["awesome"] as? Bool, true)
         XCTAssertEqual(object["superAwesome"] as? Bool, false)
-
+        
         object["awesome"] = "true"
-
+        
         XCTAssertEqual(object["awesome"] as? String, "true")
         XCTAssertEqual(object["superAwesome"] as? Bool, false)
-
+        
         object["username"] = true
         XCTAssertEqual(object["username"] as? Bool, true)
-
+        
         object["username"] = false
         XCTAssertEqual(object["username"] as? Bool, false)
-
+        
         object["username"] = 3.14
         XCTAssertEqual(object["username"] as? Double, 3.14)
     }
-
+    
     func testArrayUnsetValue() {
         var object = JSONObject()
-
+        
         object["key"] = true
         XCTAssertEqual(object["key"] as? Bool, true)
         object["key"] = nil
-
+        
         object["key"] = false
         XCTAssertEqual(object["key"] as? Bool, false)
         object["key"] = nil
-
+        
         object["key"] = 3.14
         XCTAssertEqual(object["key"] as? Double, 3.14)
         object["key"] = nil
-
+        
         object["key"] = NSNull()
         XCTAssert(object["key"] is NSNull)
         object["key"] = nil
-
+        
         object["key"] = 5
         XCTAssertEqual(object["key"] as? Int, 5)
         object["key"] = nil
-
+        
         object["key"] = "Hello, world"
         XCTAssertEqual(object["key"] as? String, "Hello, world")
         object["key"] = nil
-
+        
         object["key"] = [
             3, true, false, NSNull(), 3.14
         ] as JSONArray
-
+        
         if let array = object["key"] as? JSONArray {
             XCTAssertEqual(array[0] as? Int, 3)
             XCTAssertEqual(array[1] as? Bool, true)
@@ -959,33 +975,33 @@ final class IkigaJSONTests: XCTestCase {
             XCTFail()
         }
         object["key"] = nil
-
+        
         XCTAssertEqual(object.string, "{}")
     }
-
+    
     func testInvalidJSONCase() {
         let object = """
         {
             "hoi" "",
         }
         """
-
+        
         struct Test: Codable {
             var hoi: String
         }
-
+        
         let decoder = IkigaJSONDecoder()
         XCTAssertThrowsError(try decoder.decode(Test.self, from: object))
     }
-
+    
     func testDataEncoding() throws {
         struct Datas: Codable {
             var data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
         }
-
+        
         var encoder = IkigaJSONEncoder()
         let instance = Datas()
-
+        
         encoder.settings.dataEncodingStrategy = .deferredToData
         var json = try encoder.encodeJSONObject(from: instance)
         if let bytes = json["data"] {
@@ -997,11 +1013,11 @@ final class IkigaJSONTests: XCTestCase {
         } else {
             XCTFail()
         }
-
+        
         encoder.settings.dataEncodingStrategy = .base64
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["data"].string, instance.data.base64EncodedString())
-
+        
         encoder.settings.dataEncodingStrategy = .custom({ _, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(true)
@@ -1009,38 +1025,38 @@ final class IkigaJSONTests: XCTestCase {
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["data"].bool, true)
     }
-
+    
     func testDataDecoding() throws {
         struct Datas: Codable {
             let data: Data
         }
-
+        
         let decoder = IkigaJSONDecoder()
-
+        
         decoder.settings.dataDecodingStrategy = .deferredToData
         var datas = try decoder.decode(Datas.self, from: "{\"data\":[1,2,3]}")
         XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
-
+        
         decoder.settings.dataDecodingStrategy = .custom({ _ in
             return Data(bytes: [1, 2, 3])
         })
         datas = try decoder.decode(Datas.self, from: "{\"data\":true}")
         XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
-
+        
         let data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
         decoder.settings.dataDecodingStrategy = .base64
         datas = try decoder.decode(Datas.self, from: "{\"data\":\"\(data.base64EncodedString())\"}")
         XCTAssertEqual(datas.data, data)
     }
-
+    
     func testArrayDataEncoding() throws {
         struct Datas: Codable {
             var datas = [Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])]
         }
-
+        
         var encoder = IkigaJSONEncoder()
         let instance = Datas()
-
+        
         encoder.settings.dataEncodingStrategy = .deferredToData
         var json = try encoder.encodeJSONObject(from: instance)
         if let bytes = json["datas"].array?[0].array {
@@ -1052,11 +1068,11 @@ final class IkigaJSONTests: XCTestCase {
         } else {
             XCTFail()
         }
-
+        
         encoder.settings.dataEncodingStrategy = .base64
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["datas"].array?[0].string, instance.datas[0].base64EncodedString())
-
+        
         encoder.settings.dataEncodingStrategy = .custom({ _, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(true)
@@ -1064,40 +1080,40 @@ final class IkigaJSONTests: XCTestCase {
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["datas"].array?[0].bool, true)
     }
-
+    
     @available(OSX 10.12, *)
     func testArrayDateEncoding() throws {
         struct Dates: Codable {
             var dates = [Date()]
         }
-
+        
         var encoder = IkigaJSONEncoder()
         let instance = Dates()
-
+        
         encoder.settings.dateEncodingStrategy = .iso8601
         let iso = ISO8601DateFormatter().string(from: instance.dates[0])
         var json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].string, iso)
-
+        
         encoder.settings.dateEncodingStrategy = .deferredToDate
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSinceReferenceDate)
-
+        
         encoder.settings.dateEncodingStrategy = .secondsSince1970
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSince1970)
-
+        
         encoder.settings.dateEncodingStrategy = .millisecondsSince1970
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].double, instance.dates[0].timeIntervalSince1970 * 1000)
-
+        
         encoder.settings.dateEncodingStrategy = .custom({ _, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(true)
         })
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["dates"].array?[0].bool, true)
-
+        
         let formatter = DateFormatter()
         formatter.dateFormat = "YYYY"
         encoder.settings.dateEncodingStrategy = .formatted(formatter)
@@ -1105,40 +1121,40 @@ final class IkigaJSONTests: XCTestCase {
         let result = formatter.string(from: instance.dates[0])
         XCTAssertEqual(json["dates"].array?[0].string, result)
     }
-
+    
     @available(OSX 10.12, *)
     func testDateEncoding() throws {
         struct DateTest: Codable {
             let date = Date()
         }
-
+        
         var encoder = IkigaJSONEncoder()
         let instance = DateTest()
-
+        
         encoder.settings.dateEncodingStrategy = .iso8601
         let iso = ISO8601DateFormatter().string(from: instance.date)
         var json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["date"].string, iso)
-
+        
         encoder.settings.dateEncodingStrategy = .deferredToDate
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["date"].double, instance.date.timeIntervalSinceReferenceDate)
-
+        
         encoder.settings.dateEncodingStrategy = .secondsSince1970
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["date"].double, instance.date.timeIntervalSince1970)
-
+        
         encoder.settings.dateEncodingStrategy = .millisecondsSince1970
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["date"].double, instance.date.timeIntervalSince1970 * 1000)
-
+        
         encoder.settings.dateEncodingStrategy = .custom({ date, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(true)
         })
         json = try encoder.encodeJSONObject(from: instance)
         XCTAssertEqual(json["date"].bool, true)
-
+        
         let formatter = DateFormatter()
         formatter.dateFormat = "YYYY"
         encoder.settings.dateEncodingStrategy = .formatted(formatter)
@@ -1166,50 +1182,50 @@ final class IkigaJSONTests: XCTestCase {
         let blob2 = try JSONDecoder().decode(Blob.self, from: json)
         XCTAssertEqual(blob, blob2)
     }
-
+    
     func testNestedObjectInObjectAccess() {
         var profile: JSONObject = [
             "username": "Joannis"
         ]
-
+        
         var user: JSONObject = [
             "profile": profile
         ]
-
+        
         XCTAssertEqual(user["profile"]?["username"] as? String, "Joannis")
-
+        
         profile["username"] = "Henk"
         XCTAssertEqual(profile["username"].string, "Henk")
-
+        
         user["profile"] = profile
         XCTAssertEqual(user["profile"]?["username"] as? String, "Henk")
-
+        
         user["profile"] = nil
         XCTAssertNil(user["profile"])
         XCTAssertNil(user["profile"]?["username"])
-
+        
         user["profile"] = true
         XCTAssertEqual(user["profile"] as? Bool, true)
         XCTAssertNil(user["profile"]?["username"])
-
+        
         user["profile"] = profile
         XCTAssertEqual(user["profile"]?["username"] as? String, "Henk")
     }
-
+    
     func testNestedArrayInObjectAccess() {
-
+        
     }
-
+    
     func testArrayAccess() {
-
+        
     }
-
+    
     func testNestedObjectInArrayAccess() {
-
+        
     }
-
+    
     func testNestedArrayInArrayAccess() {
-
+        
     }
     
     static var allTests = [
