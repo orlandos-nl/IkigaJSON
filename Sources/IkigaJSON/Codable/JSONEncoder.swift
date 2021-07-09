@@ -689,6 +689,14 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         }
     }
     
+    mutating func encodeIfPresent<T>(_ value: T?, forKey key: Key) throws where T : Encodable {
+        if let value = value {
+            try encode(value, forKey: key)
+        } else {
+            try encodeNil(forKey: key)
+        }
+    }
+    
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
         self.encoder.writeKey(key.stringValue)
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
@@ -883,6 +891,8 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         if try self.encoder.writeOtherValue(value) {
             return
+        } else if case Optional<Any>.none = value as Any {
+            return try encodeNil()
         }
         
         self.encoder.writeComma()

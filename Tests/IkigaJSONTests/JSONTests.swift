@@ -213,6 +213,50 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssert(object["yes"] is NSNull)
         XCTAssert(object.keys.contains("yes"))
     }
+
+    func testEncodeOptionalNilProperty() throws {
+        struct Test: Codable {
+            struct Custom: Codable, Equatable { var value = 3 }
+            let yes: Custom?
+        }
+
+        let value = Test(yes: .init())
+        let noValue = Test(yes: nil)
+
+        var encoder = IkigaJSONEncoder()
+        var object = try encoder.encodeJSONObject(from: value)
+        XCTAssertEqual(object["yes"]?["value"]?.int, 3)
+
+        object = try encoder.encodeJSONObject(from: noValue)
+        XCTAssertFalse(object["yes"] is NSNull)
+        XCTAssertFalse(object.keys.contains("yes"))
+
+        encoder.settings.encodeNilAsNull = true
+
+        object = try encoder.encodeJSONObject(from: noValue)
+        XCTAssert(object["yes"] is NSNull)
+        XCTAssert(object.keys.contains("yes"))
+    }
+
+    func testEncodeOptionalArrayNil() throws {
+        struct Test: Codable {
+            struct Custom: Codable, Equatable { var value = 3 }
+            let yes: [Custom?]
+        }
+
+        let value = Test(yes: [.init(), .init(), nil, .init(), .init()])
+
+        var encoder = IkigaJSONEncoder()
+        var object = try encoder.encodeJSONObject(from: value)
+        XCTAssertEqual(object["yes"]?.array?.count, 4)
+        XCTAssertNil(object["yes"]?.array?[2].null)
+
+        encoder.settings.encodeNilAsNull = true
+
+        object = try encoder.encodeJSONObject(from: value)
+        XCTAssertEqual(object["yes"]?.array?.count, 5)
+        XCTAssertNotNil(object["yes"]?.array?[2].null)
+    }
     
     private func measureTime(run block: () throws -> ()) rethrows -> TimeInterval {
         let date = Date()
