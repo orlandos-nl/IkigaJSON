@@ -216,7 +216,11 @@ final class IkigaJSONTests: XCTestCase {
     
     private func measureTime(run block: () throws -> ()) rethrows -> TimeInterval {
         let date = Date()
-        try block()
+        
+        for _ in 0..<100_000 {
+            try block()
+        }
+        
         return Date().timeIntervalSince(date)
     }
     
@@ -237,7 +241,7 @@ final class IkigaJSONTests: XCTestCase {
             _ = try foundation.encode(array)
         }
         
-        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
+        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
     }
     
     func testObjectEncodingPerformance() throws {
@@ -251,7 +255,7 @@ final class IkigaJSONTests: XCTestCase {
         
         var dictionary = [String: String]()
         
-        for i in 0..<100_000 {
+        for i in 0..<100 {
             dictionary[String(i)] = string
         }
         
@@ -263,7 +267,8 @@ final class IkigaJSONTests: XCTestCase {
             _ = try foundation.encode(dictionary)
         }
         
-        XCTAssert(ikigaTimeSpent < foundationTimeSpent)
+        print(ikigaTimeSpent, foundationTimeSpent)
+        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
     }
     
     func testAllEncoding() throws {
@@ -883,21 +888,35 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testCodablePerformance() throws {
+        let ikiga = IkigaJSONDecoder()
+        let foundation = JSONDecoder()
+        
         let data = """
         {
             "awesome": true,
-            "superAwesome": false
+            "superAwesome": false,
+            "string": "string",
+            "num": 3.14
         }
         """.data(using: .utf8)!
         
         struct User: Decodable {
             let awesome: Bool
             let superAwesome: Bool
+            let string: String
+            let num: Double
         }
         
-        for _ in 0..<100_000 {
-            _ = try! newParser.decode(User.self, from: data)
+        let ikigaTimeSpent = try measureTime {
+            _ = try ikiga.decode(User.self, from: data)
         }
+        
+        let foundationTimeSpent = try measureTime {
+            _ = try foundation.decode(User.self, from: data)
+        }
+        
+        print(ikigaTimeSpent, foundationTimeSpent)
+        XCTAssertLessThan(ikigaTimeSpent, foundationTimeSpent)
     }
     
     func testObjectAccess() {
