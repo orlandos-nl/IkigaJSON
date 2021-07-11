@@ -99,9 +99,9 @@ final class IkigaJSONTests: XCTestCase {
     
     func testBackslashWorks() throws {
         let string = #"""
-            {
-            "\\hi": "\\\""
-            }
+        {
+            "\\hi": "\""
+        }
         """#.data(using: .utf8)!
         
         XCTAssertNoThrow(try JSONObject(data: string))
@@ -217,7 +217,7 @@ final class IkigaJSONTests: XCTestCase {
     private func measureTime(run block: () throws -> ()) rethrows -> TimeInterval {
         let date = Date()
         
-        for _ in 0..<100_000 {
+        for _ in 0..<1_000 {
             try block()
         }
         
@@ -816,15 +816,15 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testEscaping() throws {
-        let json = """
+        let json = #"""
         {
             "id": "0",
-            "username": "Joannis\\tis\\nawesome\\/\\\"",
+            "username": "Joannis\tis\nawesome\/\\\"",
             "roles": ["admin", null, "member", "moderator"],
             "awesome": true,
             "superAwesome": false
         }
-        """.data(using: .utf8)!
+        """#.data(using: .utf8)!
         
         struct User: Decodable {
             let id: String
