@@ -108,6 +108,8 @@ extension JSONParser {
             throw JSONParserError.missingData
         }
         
+        try skipWhitespace()
+        
         switch pointer.pointee {
         case .quote:
             try scanStringLiteral()
@@ -117,7 +119,7 @@ extension JSONParser {
             try scanArray()
         case .f: // false
             guard count > 5 else {
-                throw JSONParserError.missingData
+                throw JSONParserError.invalidLiteral
             }
             
             guard pointer[1] == .a, pointer[2] == .l, pointer[3] == .s, pointer[4] == .e else {
@@ -128,7 +130,7 @@ extension JSONParser {
             description.describeFalse(atJSONOffset: Int32(currentOffset))
         case .t: // true
             guard count > 4 else {
-                throw JSONParserError.missingData
+                throw JSONParserError.invalidLiteral
             }
             
             guard pointer[1] == .r, pointer[2] == .u, pointer[3] == .e else {
@@ -139,7 +141,7 @@ extension JSONParser {
             description.describeTrue(atJSONOffset: Int32(currentOffset))
         case .n: // null
             guard count > 4 else {
-                throw JSONParserError.missingData
+                throw JSONParserError.invalidLiteral
             }
             
             guard pointer[1] == .u, pointer[2] == .l, pointer[3] == .l else {

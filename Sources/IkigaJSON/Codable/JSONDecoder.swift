@@ -137,6 +137,27 @@ public final class IkigaJSONDecoder {
         
         return try self.decode(type, from: data)
     }
+    
+    public func parse<D: Decodable>(
+        _ type: D.Type,
+        from buffer: inout ByteBuffer,
+        settings: JSONDecoderSettings = JSONDecoderSettings()
+    ) throws -> D {
+        return try buffer.readWithUnsafeMutableReadableBytes { buffer -> (Int, D) in
+            let buffer = buffer.bindMemory(to: UInt8.self)
+            let pointer = buffer.baseAddress!
+            if self.parser == nil {
+                parser = JSONParser(pointer: pointer, count: buffer.count)
+            } else {
+                parser.recycle(pointer: pointer, count: buffer.count)
+            }
+            try parser.scanValue()
+            
+            let decoder = _JSONDecoder(description: parser!.description, pointer: pointer, settings: settings)
+            let type = try D(from: decoder)
+            return (parser.currentOffset, type)
+        }
+    }
 }
 
 fileprivate struct _JSONDecoder: Decoder {
