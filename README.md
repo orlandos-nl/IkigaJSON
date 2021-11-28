@@ -1,6 +1,11 @@
 # IkigaJSON
 
 IkigaJSON is a really fast JSON parser. It performed ~4x faster than Foundation in our tests when decoding a type from JSON.
+Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too!
+
+### Server-Side Swift
+
+The above statement was tested on Foundation for macOS and iOS. If you're using Swift on Linux with Swift 5.5, your performance is slightly better if you use the new Foundation for Linux. Swift 5.5 does not improve Foundation's JSON performance on macOS or iOS.
 
 ### Adding the dependency
 
