@@ -405,8 +405,36 @@ fileprivate final class _JSONEncoder: Encoder {
     
     func writeKey(_ key: String) {
         writeComma()
-        writeValue(key)
+        writeValue(transformKey(key))
         data.insert(.colon, at: &offset)
+    }
+    
+    func transformKey(_ key: String) -> String {
+        struct CustomKey: CodingKey {
+            let stringValue: String
+            var intValue: Int? { nil }
+            
+            init?(intValue: Int) {
+                nil
+            }
+            
+            init(stringValue: String) {
+                self.stringValue = stringValue
+            }
+        }
+        
+        switch settings.keyEncodingStrategy {
+        case .convertToSnakeCase:
+            return key.convertSnakeCasing()
+        case .custom(let mapper):
+            return mapper(
+                codingPath + [CustomKey(stringValue: key)]
+            ).stringValue
+        case .useDefaultKeys:
+            return key
+        @unknown default:
+            return key
+        }
     }
     
     func writeNull(forKey key: String) {

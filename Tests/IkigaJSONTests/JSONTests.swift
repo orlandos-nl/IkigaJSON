@@ -418,7 +418,7 @@ final class IkigaJSONTests: XCTestCase {
             
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = false
-            var object = try encoder.encodeJSONObject(from: test)
+            let object = try encoder.encodeJSONObject(from: test)
             
             XCTAssertEqual(object.keys, ["a", "p", "d"])
             
@@ -451,7 +451,7 @@ final class IkigaJSONTests: XCTestCase {
             
             var encoder = IkigaJSONEncoder()
             encoder.settings.encodeNilAsNull = true
-            var object = try encoder.encodeJSONObject(from: test)
+            let object = try encoder.encodeJSONObject(from: test)
             
             XCTAssertEqual(object.keys, ["a", "p", "d"])
             
@@ -671,6 +671,25 @@ final class IkigaJSONTests: XCTestCase {
         }
         
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+    
+    func testKeyEncoding() throws {
+        var encoder = newEncoder
+        encoder.settings.keyEncodingStrategy = .convertToSnakeCase
+        
+        struct Test: Codable {
+            let userName: String
+            let eMail: String
+        }
+        
+        let user = Test(userName: "Joannis", eMail: "joannis@orlandos.nl")
+        let json = try encoder.encodeJSONObject(from: user)
+        
+        XCTAssertEqual(Set(json.keys), ["user_name", "e_mail"])
+    }
+    
+    func testEncodeNilAsNullFalse() throws {
+        XCTFail()
     }
     
     func testKeyDecoding() throws {
@@ -1095,7 +1114,7 @@ final class IkigaJSONTests: XCTestCase {
     
     func testDataEncoding() throws {
         struct Datas: Codable {
-            var data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
+            var data = Data([0x01, 0x02, 0x03, 0x04, 0x05])
         }
         
         var encoder = IkigaJSONEncoder()
@@ -1134,15 +1153,15 @@ final class IkigaJSONTests: XCTestCase {
         
         decoder.settings.dataDecodingStrategy = .deferredToData
         var datas = try decoder.decode(Datas.self, from: "{\"data\":[1,2,3]}")
-        XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
+        XCTAssertEqual(datas.data, Data([1,2,3]))
         
         decoder.settings.dataDecodingStrategy = .custom({ _ in
-            return Data(bytes: [1, 2, 3])
+            return Data([1, 2, 3])
         })
         datas = try decoder.decode(Datas.self, from: "{\"data\":true}")
-        XCTAssertEqual(datas.data, Data(bytes: [1,2,3]))
+        XCTAssertEqual(datas.data, Data([1,2,3]))
         
-        let data = Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])
+        let data = Data([0x01, 0x02, 0x03, 0x04, 0x05])
         decoder.settings.dataDecodingStrategy = .base64
         datas = try decoder.decode(Datas.self, from: "{\"data\":\"\(data.base64EncodedString())\"}")
         XCTAssertEqual(datas.data, data)
@@ -1150,7 +1169,7 @@ final class IkigaJSONTests: XCTestCase {
     
     func testArrayDataEncoding() throws {
         struct Datas: Codable {
-            var datas = [Data(bytes: [0x01, 0x02, 0x03, 0x04, 0x05])]
+            var datas = [Data([0x01, 0x02, 0x03, 0x04, 0x05])]
         }
         
         var encoder = IkigaJSONEncoder()
@@ -1224,7 +1243,7 @@ final class IkigaJSONTests: XCTestCase {
     @available(OSX 10.12, *)
     func testDateEncoding() throws {
         struct DateTest: Codable {
-            let date = Date()
+            var date = Date()
         }
         
         var encoder = IkigaJSONEncoder()
