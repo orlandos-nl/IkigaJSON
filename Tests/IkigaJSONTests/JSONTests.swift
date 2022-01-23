@@ -689,8 +689,34 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testEncodeNilAsNullFalse() throws {
-        XCTFail()
+        var encoder = newEncoder
+        encoder.settings.encodeNilAsNull = false
+        
+        struct Test: Codable {
+            let nonOptional: String
+            let optional: String?
+        }
+        
+        let user = Test(nonOptional: "Joannis", optional: .none)
+        let json = try encoder.encodeJSONObject(from: user)
+        
+        XCTAssertEqual(Set(json.keys), ["nonOptional"])
     }
+    
+//    func testEncodeNilAsNullFalseInWeirdScenarios() throws {
+//        var encoder = newEncoder
+//        encoder.settings.encodeNilAsNull = false
+//        
+//        struct Test: Codable {
+//            let nonOptional: String
+//            let optional: String??
+//        }
+//        
+//        let user = Test(nonOptional: "Joannis", optional: .some(.none))
+//        let json = try encoder.encodeJSONObject(from: user)
+//        
+//        XCTAssertEqual(Set(json.keys), ["nonOptional"])
+//    }
     
     func testKeyDecoding() throws {
         let parser = newParser

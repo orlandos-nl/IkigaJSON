@@ -714,6 +714,8 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
+        // TODO: Support `Optional<Optional<String>>.some(.none)`?
+        // Non-optional fast path, with a slight exception with writing `null` in cases of codable abuse
         self.encoder.writeKey(key.stringValue)
         
         if try self.encoder.writeOtherValue(value) {
@@ -724,6 +726,8 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
         if !encoder.didWriteValue {
+            // No value was written, but a non-optional value was supposed to be written
+            // F-it, we'll write null here
             encoder.writeNull()
         }
         self.encoder.didWriteValue = true
