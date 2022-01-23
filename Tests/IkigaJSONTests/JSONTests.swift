@@ -1291,4 +1291,50 @@ final class IkigaJSONTests: XCTestCase {
         
     }
     
+    struct NestedByUsingSuper: Codable {
+        struct NestedWithinUsingSuper: Codable, Equatable { let bar: String }
+
+        private enum CodingKeys: String, CodingKey { case foo, parent, unkeyed }
+
+        let foo: Int, `super`: NestedWithinUsingSuper, parent: NestedWithinUsingSuper
+        let unkeyed: (Bool, NestedWithinUsingSuper)
+        
+        init(foo: Int, barSuper: String, barParent: String, flag: Bool, barNumbered: String) {
+            self.foo = foo
+            self.super = .init(bar: barSuper)
+            self.parent = .init(bar: barParent)
+            self.unkeyed = (flag, .init(bar: barNumbered))
+        }
+        
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.foo = try container.decode(Int.self, forKey: .foo)
+            self.super = try .init(from: container.superDecoder())
+            self.parent = try .init(from: container.superDecoder(forKey: .parent))
+            var unkeyedContainer = try container.nestedUnkeyedContainer(forKey: .unkeyed)
+            self.unkeyed = try (unkeyedContainer.decode(Bool.self), .init(from: unkeyedContainer.superDecoder()))
+        }
+        
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.foo, forKey: .foo)
+            try self.super.encode(to: container.superEncoder())
+            try self.parent.encode(to: container.superEncoder(forKey: .parent))
+            var unkeyedContainer = container.nestedUnkeyedContainer(forKey: .unkeyed)
+            try unkeyedContainer.encode(self.unkeyed.0)
+            try self.unkeyed.1.encode(to: unkeyedContainer.superEncoder())
+        }
+    }
+    
+    func testSuperEncoderDecoderUsage() throws {
+        let raw = NestedByUsingSuper(foo: 5, barSuper: "super bar", barParent: "parent bar", flag: true, barNumbered: "number your days")
+        let encoded = try IkigaJSONEncoder().encode(raw)
+        let decoded = try IkigaJSONDecoder().decode(NestedByUsingSuper.self, from: encoded)
+        
+        XCTAssertEqual(raw.foo, decoded.foo)
+        XCTAssertEqual(raw.super, decoded.super)
+        XCTAssertEqual(raw.parent, decoded.parent)
+        XCTAssertEqual(raw.unkeyed.0, decoded.unkeyed.0)
+        XCTAssertEqual(raw.unkeyed.1, decoded.unkeyed.1)
+    }
 }

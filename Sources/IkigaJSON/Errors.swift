@@ -17,6 +17,7 @@ public enum JSONParserError: Error {
     case unknownJSONStrategy
     case missingKeyedContainer
     case missingUnkeyedContainer
+    case missingSuperDecoder
     case decodingError(expected: Any.Type, keyPath: [CodingKey])
     case invalidTopLevelObject
     case missingData, invalidLiteral
