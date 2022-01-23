@@ -82,6 +82,8 @@ internal extension UInt8 {
     static let colon: UInt8 = 0x3a
     static let E: UInt8 = 0x45
     static let underscore: UInt8 = 0x5f
+    static let A: UInt8 = 0x41
+    static let Z: UInt8 = 0x5a
     static let a: UInt8 = 0x61
     static let b: UInt8 = 0x62
     static let e: UInt8 = 0x65

@@ -467,6 +467,27 @@ struct UnfinishedDescription {
     fileprivate let firstChildIndexOffset: Int
 }
 
+extension String {
+    internal func convertSnakeCasing() -> String {
+        var utf8 = Array(self.utf8)
+        let size = utf8.count
+        var i = size
+        
+        while i > 0 {
+            i &-= 1
+            
+            let byte = utf8[i]
+            if byte >= .A && byte <= .Z {
+                // make lowercased
+                utf8[i] &+= 0x20
+                utf8.insert(.underscore, at: i)
+            }
+        }
+        
+        return String(bytes: utf8, encoding: .utf8)!
+    }
+}
+
 extension JSONDescription {
     func subDescription(offset: Int) -> JSONDescription {
         return JSONDescription(buffer: buffer.getSlice(at: offset, length: buffer.readableBytes - offset)!)
@@ -499,8 +520,8 @@ extension JSONDescription {
         // The string was guaranteed by us to still be valid UTF-8
         let byteCount = characters.count
         if byteCount == keySize {
-            return characters.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
-                return memcmp(key, pointer, keySize) == 0
+            return characters.withUnsafeBytes { buffer in
+                return memcmp(key, buffer.baseAddress!, keySize) == 0
             }
         }
         
