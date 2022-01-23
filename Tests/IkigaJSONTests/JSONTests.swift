@@ -1291,11 +1291,4 @@ final class IkigaJSONTests: XCTestCase {
         
     }
     
-    static var allTests = [
-        ("testObject", testObject),
-        ("testArray", testArray),
-        ("testEscaping", testEscaping),
-        ("testNumerical", testNumerical),
-        ("testCodablePerformance", testCodablePerformance),
-    ]
 }
