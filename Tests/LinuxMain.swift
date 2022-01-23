@@ -1,4 +1,0 @@
-import XCTest
-
-import IkigaJSONTests
-

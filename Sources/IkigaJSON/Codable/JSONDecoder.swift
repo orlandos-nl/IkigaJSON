@@ -25,6 +25,9 @@ func date(from string: String) throws -> Date {
     }
 }
 
+/// Used by `KeyedDecodingContainer.superDecoder()` and `KeyedEncodingContainer.superEncoder()`.
+internal enum SuperCodingKey: String, CodingKey { case `super` }
+
 /// These settings can be used to alter the decoding process.
 public struct JSONDecoderSettings {
     public init() {}
@@ -433,53 +436,39 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         return try decodeInt(type, forKey: key)
     }
     
-    func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T : Decodable {
+    private func subDecoder<Key: CodingKey>(forKey key: Key, orThrow failureError: Error, appendingToPath: Bool = true) throws -> _JSONDecoder {
         guard let (_, offset) = self.decoder.description.valueOffset(
             forKey: self.decoder.string(forKey: key),
             convertingSnakeCasing: self.decoder.snakeCasing,
             in: self.decoder.pointer
         ) else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
+            throw failureError
         }
-        
-        let decoder = self.decoder.subDecoder(offsetBy: offset)
-        return try decoder.decode(type)
+        return self.decoder.subDecoder(offsetBy: offset)
+    }
+    
+    func decode<T>(_: T.Type, forKey key: Key) throws -> T where T : Decodable {
+        return try self.subDecoder(
+            forKey: key,
+            orThrow: JSONParserError.decodingError(expected: T.self, keyPath: self.codingPath),
+            appendingToPath: false
+        ).decode(T.self)
     }
     
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: Key) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
-        guard let (_, offset) = self.decoder.description.valueOffset(
-            forKey: self.decoder.string(forKey: key),
-            convertingSnakeCasing: self.decoder.snakeCasing,
-            in: self.decoder.pointer
-        ) else {
-            throw JSONParserError.missingKeyedContainer
-        }
-        
-        var decoder = self.decoder.subDecoder(offsetBy: offset)
-        decoder.codingPath.append(key)
-        return try decoder.container(keyedBy: NestedKey.self)
+        return try self.subDecoder(forKey: key, orThrow: JSONParserError.missingKeyedContainer).container(keyedBy: NestedKey.self)
     }
     
     func nestedUnkeyedContainer(forKey key: Key) throws -> UnkeyedDecodingContainer {
-        guard let (_, offset) = self.decoder.description.valueOffset(
-            forKey: self.decoder.string(forKey: key),
-            convertingSnakeCasing: self.decoder.snakeCasing,
-            in: self.decoder.pointer
-        ) else {
-            throw JSONParserError.missingUnkeyedContainer
-        }
-        
-        var decoder = self.decoder.subDecoder(offsetBy: offset)
-        decoder.codingPath.append(key)
-        return try decoder.unkeyedContainer()
+        return try self.subDecoder(forKey: key, orThrow: JSONParserError.missingUnkeyedContainer).unkeyedContainer()
     }
     
     func superDecoder() throws -> Decoder {
-        return decoder
+        return try self.subDecoder(forKey: SuperCodingKey.super, orThrow: JSONParserError.missingSuperDecoder)
     }
     
     func superDecoder(forKey key: Key) throws -> Decoder {
-        return decoder
+        return try self.subDecoder(forKey: key, orThrow: JSONParserError.missingSuperDecoder)
     }
 }
 
@@ -533,7 +522,6 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     mutating func decode(_ type: Bool.Type) throws -> Bool {
         try assertHasMore()
         let type = decoder.description.type(atOffset: offset)
-        decoder.description.skipIndex(atOffset: &offset)
         skipValue()
         
         switch type {
@@ -688,6 +676,8 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
     
     mutating func superDecoder() throws -> Decoder {
+        let decoder = self.decoder.subDecoder(offsetBy: offset)
+        skipValue()
         return decoder
     }
 }

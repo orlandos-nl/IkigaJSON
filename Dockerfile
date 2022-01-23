@@ -1,7 +1,7 @@
 # ================================
 # Build image
 # ================================
-FROM swift:5.5.0-bionic as build
+FROM swift:5.5.0-focal as build
 WORKDIR /build
 
 # First just resolve dependencies.
