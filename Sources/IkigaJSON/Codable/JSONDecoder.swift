@@ -84,10 +84,8 @@ public final class IkigaJSONDecoder {
     
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
-        let count = data.count
-        
-        return try data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
-            return try decode(type, from: UnsafeBufferPointer(start: pointer, count: count))
+        return try data.withUnsafeBytes { buffer in
+            return try decode(type, from: buffer.bindMemory(to: UInt8.self))
         }
     }
     

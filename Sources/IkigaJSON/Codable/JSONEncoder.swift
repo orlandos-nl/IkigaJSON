@@ -308,26 +308,36 @@ fileprivate final class _JSONEncoder: Encoder {
     }
     
     func writeValue(_ string: String) {
+        didWriteValue = true
+        
         data.insert(.quote, at: &offset)
         data.insert(contentsOf: string.escaped.1, at: &offset)
         data.insert(.quote, at: &offset)
     }
     
     func writeNull() {
+        didWriteValue = true
+        
         data.insert(contentsOf: nullBytes, at: &offset)
     }
     
     func writeValue(_ value: Bool) {
+        didWriteValue = true
+        
         data.insert(contentsOf: value ? boolTrue : boolFalse, at: &offset)
     }
     
     func writeValue(_ value: Double) {
+        didWriteValue = true
+        
         // TODO: Optimize
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
     }
     
     func writeValue(_ value: Float) {
+        didWriteValue = true
+        
         // TODO: Optimize
         let number = String(value)
         data.insert(contentsOf: number, at: &offset)
@@ -395,8 +405,36 @@ fileprivate final class _JSONEncoder: Encoder {
     
     func writeKey(_ key: String) {
         writeComma()
-        writeValue(key)
+        writeValue(transformKey(key))
         data.insert(.colon, at: &offset)
+    }
+    
+    func transformKey(_ key: String) -> String {
+        struct CustomKey: CodingKey {
+            let stringValue: String
+            var intValue: Int? { nil }
+            
+            init?(intValue: Int) {
+                nil
+            }
+            
+            init(stringValue: String) {
+                self.stringValue = stringValue
+            }
+        }
+        
+        switch settings.keyEncodingStrategy {
+        case .convertToSnakeCase:
+            return key.convertSnakeCasing()
+        case .custom(let mapper):
+            return mapper(
+                codingPath + [CustomKey(stringValue: key)]
+            ).stringValue
+        case .useDefaultKeys:
+            return key
+        @unknown default:
+            return key
+        }
     }
     
     func writeNull(forKey key: String) {
@@ -676,17 +714,23 @@ fileprivate struct KeyedJSONEncodingContainer<Key: CodingKey>: KeyedEncodingCont
     }
     
     mutating func encode<T>(_ value: T, forKey key: Key) throws where T : Encodable {
+        // TODO: Support `Optional<Optional<String>>.some(.none)`?
+        // Non-optional fast path, with a slight exception with writing `null` in cases of codable abuse
         self.encoder.writeKey(key.stringValue)
         
         if try self.encoder.writeOtherValue(value) {
+            self.encoder.didWriteValue = true
             return
         }
         
         let encoder = _JSONEncoder(codingPath: codingPath + [key], userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
-        if encoder.didWriteValue {
-            self.encoder.didWriteValue = true
+        if !encoder.didWriteValue {
+            // No value was written, but a non-optional value was supposed to be written
+            // F-it, we'll write null here
+            encoder.writeNull()
         }
+        self.encoder.didWriteValue = true
     }
     
     mutating func encodeIfPresent<T>(_ value: T?, forKey key: Key) throws where T : Encodable {
@@ -787,15 +831,17 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         if try self.encoder.writeOtherValue(value) {
+            self.encoder.didWriteValue = true
             return
         }
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.didWriteValue = self.encoder.didWriteValue
         try value.encode(to: encoder)
-        if encoder.didWriteValue {
-            self.encoder.didWriteValue = true
+        if !encoder.didWriteValue {
+            encoder.writeNull()
         }
+        self.encoder.didWriteValue = true
     }
 }
 
@@ -889,6 +935,7 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
     
     mutating func encode<T>(_ value: T) throws where T : Encodable {
         if try self.encoder.writeOtherValue(value) {
+            self.encoder.didWriteValue = true
             return
         } else if case Optional<Any>.none = value as Any {
             return try encodeNil()
@@ -897,9 +944,10 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
         self.encoder.writeComma()
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
-        if encoder.didWriteValue {
-            self.encoder.didWriteValue = true
+        if !encoder.didWriteValue {
+            encoder.writeNull()
         }
+        self.encoder.didWriteValue = true
     }
     
     mutating func nestedContainer<NestedKey>(keyedBy _: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {

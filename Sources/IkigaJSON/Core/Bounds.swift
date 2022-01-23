@@ -5,9 +5,9 @@ fileprivate let uppercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34,
 
 fileprivate extension UInt8 {
     func decodeHex() -> UInt8? {
-        if let num = lowercasedRadix16table.index(of: self) {
+        if let num = lowercasedRadix16table.firstIndex(of: self) {
             return numericCast(num)
-        } else if let num = uppercasedRadix16table.index(of: self) {
+        } else if let num = uppercasedRadix16table.firstIndex(of: self) {
             return numericCast(num)
         } else {
             return nil
@@ -245,8 +245,8 @@ internal struct Bounds {
 fileprivate func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
     var offset = offset
     
-    return data.withUnsafeMutableBytes { (bytes: UnsafeMutablePointer<UInt8>) in
-        let bytes = bytes.advanced(by: offset)
+    return data.withUnsafeMutableBytes { buffer in
+        let bytes = buffer.bindMemory(to: UInt8.self).baseAddress!.advanced(by: offset)
         
         while offset < length {
             guard let base = bytes[offset].decodeHex(), let secondHex = bytes[offset &+ 1].decodeHex() else {
