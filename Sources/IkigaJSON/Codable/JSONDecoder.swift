@@ -524,7 +524,6 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     mutating func decode(_ type: Bool.Type) throws -> Bool {
         try assertHasMore()
         let type = decoder.description.type(atOffset: offset)
-        decoder.description.skipIndex(atOffset: &offset)
         skipValue()
         
         switch type {

@@ -1290,6 +1290,31 @@ final class IkigaJSONTests: XCTestCase {
     func testNestedArrayInArrayAccess() {
         
     }
+
+    func testDecodeArrayOfBool() throws {
+        let data = zip(Array(repeating: true, count: 10), Array(repeating: false, count: 10)).flatMap { [$0, $1] }
+        struct Foo: Codable {
+            let bools: [Bool]
+            init(bools: [Bool]) { self.bools = bools }
+            init(from decoder: Decoder) throws {
+                // N.B.: Decoding `Array<Bool>` from a singleValueContainer() does not exercise the
+                // unkeyed container codepath.
+                var container = try decoder.unkeyedContainer()
+                var bools: [Bool] = []
+                while !container.isAtEnd { bools.append(try container.decode(Bool.self)) }
+                self.bools = bools
+            }
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.unkeyedContainer()
+                try self.bools.forEach { try container.encode($0) }
+            }
+        }
+        let encoded = try IkigaJSONEncoder().encode(Foo(bools: data))
+        XCTAssertEqual(String(decoding: encoded, as: UTF8.self), "[true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false]")
+
+        let decoded = try IkigaJSONDecoder().decode(Foo.self, from: encoded)
+        XCTAssertEqual(decoded.bools, data)
+    }
     
     struct NestedByUsingSuper: Codable {
         struct NestedWithinUsingSuper: Codable, Equatable { let bar: String }
