@@ -133,20 +133,23 @@ public final class IkigaJSONDecoder {
     }
     
     /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
-    public func decode<D: Decodable>(_ type: D.Type, from bytes: [UInt8]) throws -> D {
-        return try bytes.withUnsafeBufferPointer { buffer in
-            return try decode(type, from: buffer)
+    public func decode<D: Decodable, S: Sequence>(_: D.Type, from bytes: S) throws -> D where S.Element == UInt8 {
+        // N.B.: As of Swift 5.3, everything String-related and almost every sequence and collection type (other than transforms like LazySequence) provides contiguous storage. This is currently the most efficient known way of getting UTF-8 bytes from a non-bridged String.
+        let model = try bytes.withContiguousStorageIfAvailable {
+            try self.decode(D.self, from: $0)
+        }
+        
+        if let model = model {
+            return model
+        } else {
+            return try self.decode(D.self, from: Data(bytes))
         }
     }
     
     /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
-    public func decode<D: Decodable>(_ type: D.Type, from string: String) throws -> D {
-        // TODO: Optimize with Swift 5
-        guard let data = string.data(using: .utf8) else {
-            throw JSONParserError.invalidData(string)
-        }
-        
-        return try self.decode(type, from: data)
+    public func decode<D: Decodable, S: StringProtocol>(_: D.Type, from string: S) throws -> D {
+        // `.withUTF8()` is mutating, so can't use it here, use UTF8View to go through the Sequence overload
+        return try self.decode(D.self, from: string.utf8)
     }
     
     public func parse<D: Decodable>(
@@ -482,7 +485,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     
     func assertHasMore() throws {
         guard !isAtEnd else {
-            throw JSONParserError.endOfObject
+            throw JSONParserError.endOfArray
         }
     }
     

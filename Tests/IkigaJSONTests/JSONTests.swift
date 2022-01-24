@@ -104,12 +104,12 @@ final class IkigaJSONTests: XCTestCase {
         }
         
         var encoder = IkigaJSONEncoder()
-        encoder.settings.encodeNilAsNull = true
+        encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
         
         let valueObject = try encoder.encodeJSONObject(from: Test(encodeValue: true))
         let nullValueObject = try encoder.encodeJSONObject(from: Test(encodeValue: false))
         
-        encoder.settings.encodeNilAsNull = false
+        encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
         let emptyObject = try encoder.encodeJSONObject(from: Test(encodeValue: false))
         
         XCTAssertEqual(valueObject["hi"].string, "hi")
@@ -243,7 +243,7 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertFalse(object["yes"] is NSNull)
         XCTAssertFalse(object.keys.contains("yes"))
         
-        encoder.settings.encodeNilAsNull = true
+        encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
         
         object = try encoder.encodeJSONObject(from: noValue)
         XCTAssert(object["yes"] is NSNull)
@@ -267,7 +267,7 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertFalse(object["yes"] is NSNull)
         XCTAssertFalse(object.keys.contains("yes"))
 
-        encoder.settings.encodeNilAsNull = true
+        encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
 
         object = try encoder.encodeJSONObject(from: noValue)
         XCTAssert(object["yes"] is NSNull)
@@ -419,7 +419,7 @@ final class IkigaJSONTests: XCTestCase {
             }
             
             var encoder = IkigaJSONEncoder()
-            encoder.settings.encodeNilAsNull = false
+            encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
             let object = try encoder.encodeJSONObject(from: test)
             
             XCTAssertEqual(object.keys, ["a", "p", "d"])
@@ -452,7 +452,7 @@ final class IkigaJSONTests: XCTestCase {
             }
             
             var encoder = IkigaJSONEncoder()
-            encoder.settings.encodeNilAsNull = true
+            encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
             let object = try encoder.encodeJSONObject(from: test)
             
             XCTAssertEqual(object.keys, ["a", "p", "d"])
@@ -692,7 +692,7 @@ final class IkigaJSONTests: XCTestCase {
     
     func testEncodeNilAsNullFalse() throws {
         var encoder = newEncoder
-        encoder.settings.encodeNilAsNull = false
+        encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
         
         struct Test: Codable {
             let nonOptional: String
@@ -705,20 +705,20 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(Set(json.keys), ["nonOptional"])
     }
     
-//    func testEncodeNilAsNullFalseInWeirdScenarios() throws {
-//        var encoder = newEncoder
-//        encoder.settings.encodeNilAsNull = false
-//        
-//        struct Test: Codable {
-//            let nonOptional: String
-//            let optional: String??
-//        }
-//        
-//        let user = Test(nonOptional: "Joannis", optional: .some(.none))
-//        let json = try encoder.encodeJSONObject(from: user)
-//        
-//        XCTAssertEqual(Set(json.keys), ["nonOptional"])
-//    }
+    func testEncodeNilAsNullFalseInDoubleOptionalScenarios() throws {
+        var encoder = newEncoder
+        encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
+        
+        struct Test: Codable {
+            let nonOptional: String
+            let optional: String??
+        }
+        
+        let user = Test(nonOptional: "Joannis", optional: .some(.none))
+        let json = try encoder.encodeJSONObject(from: user)
+        
+        XCTAssertEqual(Set(json.keys), ["nonOptional"])
+    }
     
     func testKeyDecoding() throws {
         let parser = newParser
