@@ -131,6 +131,8 @@ The above method can be used to stream multiple entities from a source like a da
 
 By design you can build on top of any data storage as long as it exposes a pointer API. This way, IkigaJSON doesn't (need to) copy any data from your buffer keeping it lightweight. The entire parser can function with only 1 memory allocation and allows for reusing the Decoder to reuse the memory allocation.
 
+This allocation (called the JSONDescription) acts as a filter over the original dataset, indicating to IkigaJSON where keys, values and objects start/end. Therefore IkigaJSON can do really fast inline mutations, and provide objects such as JSONObject/JSONDescription that are extremely performant at reading individual values. This also allows IkigaJSON to decode from its own helper types such as JSONObject and JSONArray, since it doesn't need to regenerate a JSONDescription and has the original buffer at hand.
+
 ### Support
 
 - All decoding strategies that Foundation supports
