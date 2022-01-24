@@ -283,11 +283,13 @@ final class IkigaJSONTests: XCTestCase {
         let value = Test(yes: [.init(), .init(), nil, .init(), .init()])
 
         var encoder = IkigaJSONEncoder()
+        encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
+        
         var object = try encoder.encodeJSONObject(from: value)
         XCTAssertEqual(object["yes"]?.array?.count, 4)
         XCTAssertNil(object["yes"]?.array?[2].null)
 
-        encoder.settings.encodeNilAsNull = true
+        encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
 
         object = try encoder.encodeJSONObject(from: value)
         XCTAssertEqual(object["yes"]?.array?.count, 5)
@@ -1442,5 +1444,58 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(raw.parent, decoded.parent)
         XCTAssertEqual(raw.unkeyed.0, decoded.unkeyed.0)
         XCTAssertEqual(raw.unkeyed.1, decoded.unkeyed.1)
+    }
+    
+    func testNilValueEncodingStrategies() throws {
+        struct Foo: Codable {
+            let foo1: Int?
+            let foo2: Int?
+            let foo3: Int?
+            
+            private enum CodingKeys: String, CodingKey { case foo1, foo2, foo3 }
+            
+            init(_ foo1: Int?, _ foo2: Int?, _ foo3: Int?) {
+                self.foo1 = foo1
+                self.foo2 = foo2
+                self.foo3 = foo3
+            }
+            
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                
+                self.foo1 = try container.decodeIfPresent(Int.self, forKey: .foo1)
+                self.foo2 = try container.decodeNil(forKey: .foo2) ? nil : container.decode(Int.self, forKey: .foo2)
+                self.foo3 = try container.decode(Int?.self, forKey: .foo3)
+            }
+            
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                
+                try container.encodeIfPresent(self.foo1, forKey: .foo1)
+                try self.foo2.map { try container.encode($0, forKey: .foo2) } ?? container.encodeNil(forKey: .foo2)
+                try container.encode(self.foo3, forKey: .foo3)
+            }
+        }
+        
+        let foob1 = Foo(0, 0, 0), foob2 = Foo(nil, 0, 0), foob3 = Foo(0, nil, 0), foob4 = Foo(0, 0, nil)
+        var encoder = IkigaJSONEncoder()
+        
+        encoder.settings.nilValueEncodingStrategy = .default
+        XCTAssertEqual(String(decoding: try encoder.encode(foob1), as: UTF8.self), #"{"foo1":0,"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob2), as: UTF8.self), #"{"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob3), as: UTF8.self), #"{"foo1":0,"foo2":null,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob4), as: UTF8.self), #"{"foo1":0,"foo2":0,"foo3":null}"#)
+
+        encoder.settings.nilValueEncodingStrategy = .alwaysEncodeNil
+        XCTAssertEqual(String(decoding: try encoder.encode(foob1), as: UTF8.self), #"{"foo1":0,"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob2), as: UTF8.self), #"{"foo1":null,"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob3), as: UTF8.self), #"{"foo1":0,"foo2":null,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob4), as: UTF8.self), #"{"foo1":0,"foo2":0,"foo3":null}"#)
+
+        encoder.settings.nilValueEncodingStrategy = .neverEncodeNil
+        XCTAssertEqual(String(decoding: try encoder.encode(foob1), as: UTF8.self), #"{"foo1":0,"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob2), as: UTF8.self), #"{"foo2":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob3), as: UTF8.self), #"{"foo1":0,"foo3":0}"#)
+        XCTAssertEqual(String(decoding: try encoder.encode(foob4), as: UTF8.self), #"{"foo1":0,"foo2":0}"#)
     }
 }
