@@ -132,10 +132,7 @@ public final class IkigaJSONDecoder {
     /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable>(_ type: D.Type, from string: String) throws -> D {
         // TODO: Optimize with Swift 5
-        guard let data = string.data(using: .utf8) else {
-            throw JSONParserError.invalidData(string)
-        }
-        
+        let data = string.data(using: .utf8)!
         return try self.decode(type, from: data)
     }
     
@@ -515,7 +512,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     
     func assertHasMore() throws {
         guard !isAtEnd else {
-            throw JSONParserError.endOfObject
+            throw JSONParserError.endOfArray
         }
     }
     

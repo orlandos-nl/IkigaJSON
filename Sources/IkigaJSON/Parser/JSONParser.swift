@@ -33,6 +33,12 @@ internal struct JSONParser {
     /// The amount of bytes supposedly in the pointer, this must be guaranteed internally
     internal private(set) var count: Int
     
+    internal private(set) var line = 0
+    internal private(set) var lastLineOffset = 0
+    internal var column: Int {
+        currentOffset - lastLineOffset
+    }
+    
     /// Advances the amount of bytes processed and updates the related offset and count
     internal mutating func advance(_ offset: Int) {
         currentOffset = currentOffset &+ offset
@@ -48,7 +54,7 @@ internal struct JSONParser {
     /// Throws an error if the count is 0
     private func assertMoreData() throws {
         guard hasMoreData else {
-            throw JSONParserError.missingData
+            throw JSONParserError.missingData(line: line, column: column)
         }
     }
     
@@ -59,7 +65,10 @@ internal struct JSONParser {
         loop: while offset < count {
             let byte = pointer[offset]
             
-            if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+            if byte == .newLine {
+                line += 1
+                lastLineOffset = currentOffset + 1
+            } else if byte != .space && byte != .tab && byte != .carriageReturn {
                 break loop
             }
             
