@@ -623,8 +623,10 @@ fileprivate struct SingleValueJSONEncodingContainer: SingleValueEncodingContaine
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         encoder.didWriteValue = self.encoder.didWriteValue
+        encoder.didHaveContainers = self.encoder.didHaveContainers
         try value.encode(to: encoder)
         self.encoder.didWriteValue = encoder.didWriteValue
+        self.encoder.didHaveContainers = encoder.didHaveContainers
     }
 }
 
