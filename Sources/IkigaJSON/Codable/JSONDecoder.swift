@@ -40,9 +40,19 @@ public struct JSONDecoderSettings {
     /// `true` by default
     public var decodeUnicode = true
     
+    /// Defines how to act when `nil` and missing keys and values are encountered during decoding.
+    public var nilValueDecodingStrategy: NilValueDecodingStrategy = .default
+
     /// When a key is not set in the JSON Object it is regarded as `null` if the value is `true`.
     ///
     /// `true` by default
+    ///
+    /// - Warning: This property is deprecated. Use `nilValueDecodingStrategy` instead. This property
+    ///   will return true if the strategy is `.decodeNilForKeyNotFound`, false otherwise. Setting
+    ///   this property to true selects the `.decodeNilForKeyNotFound` strategy. Setting this property
+    ///   to false selects the `treatNilValuesAsMissing` strategy, if and only if the property's setter
+    ///   is explicitly called. In other words, if this property is never set, the strategy remains `.default`.
+    @available(*, deprecated, message: "Use `nilValueDecodingStrategy` instead.")
     public var decodeMissingKeyAsNil = true
     
     /// Defines the method used when decoding keys
@@ -273,12 +283,11 @@ fileprivate struct _JSONDecoder: Decoder {
 }
 
 fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
-    var codingPath: [CodingKey] {
-        return decoder.codingPath
-    }
+    var codingPath: [CodingKey] { decoder.codingPath }
+    var allKeys: [Key] { allStringKeys.compactMap(Key.init) }
     let decoder: _JSONDecoder
     
-    var allStringKeys: [String] {
+    private var allStringKeys: [String] {
         return decoder.description.keys(
             inPointer: decoder.pointer,
             unicode: decoder.settings.decodeUnicode,
@@ -286,8 +295,20 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         )
     }
     
-    var allKeys: [Key] {
-        return allStringKeys.compactMap(Key.init)
+    private func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
+        return decoder.description.floatingBounds(
+            forKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: decoder.pointer
+        )
+    }
+    
+    private func integerBounds(forKey key: Key) -> Bounds? {
+        return decoder.description.integerBounds(
+            forKey: decoder.string(forKey: key),
+            convertingSnakeCasing: self.decoder.snakeCasing,
+            in: decoder.pointer
+        )
     }
     
     func contains(_ key: Key) -> Bool {
@@ -300,50 +321,47 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
     
     func decodeNil(forKey key: Key) throws -> Bool {
-        guard let type = decoder.description.type(
-            ofKey: decoder.string(forKey: key),
-            convertingSnakeCasing: self.decoder.snakeCasing,
-            in: decoder.pointer
-        ) else {
-            return decoder.settings.decodeMissingKeyAsNil
+        switch (
+            decoder.settings.nilValueDecodingStrategy,
+            decoder.description.type(
+                ofKey: decoder.string(forKey: key),
+                convertingSnakeCasing: self.decoder.snakeCasing,
+                in: decoder.pointer
+            )
+        ) {
+            case (.default, .none), (.treatNilValuesAsMissing, .none), (.treatNilValuesAsMissing, .some(.null)):
+                throw JSONParserError.decodingError(expected: Void?.self, keyPath: codingPath + [key])
+            case (.decodeNilForKeyNotFound, .none), (_, .some(.null)): return true
+            default: return false
         }
-        
-        return type == .null
     }
+    
+    func decodeIfPresent(_ type: Bool.Type, forKey key: Key) throws -> Bool?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: String.Type, forKey key: Key) throws -> String? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Float.Type, forKey key: Key) throws -> Float?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Double.Type, forKey key: Key) throws -> Double? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int.Type, forKey key: Key) throws -> Int?       { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int8.Type, forKey key: Key) throws -> Int8?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int16.Type, forKey key: Key) throws -> Int16?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int32.Type, forKey key: Key) throws -> Int32?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int64.Type, forKey key: Key) throws -> Int64?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt.Type, forKey key: Key) throws -> UInt?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt8.Type, forKey key: Key) throws -> UInt8?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt16.Type, forKey key: Key) throws -> UInt16? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt32.Type, forKey key: Key) throws -> UInt32? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt64.Type, forKey key: Key) throws -> UInt64? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent<T>(_ type: T.Type, forKey key: Key) throws -> T? where T : Decodable { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
     
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-        guard let jsonType = decoder.description.type(
+        switch decoder.description.type(
             ofKey: decoder.string(forKey: key),
             convertingSnakeCasing: self.decoder.snakeCasing,
             in: decoder.pointer
-        ) else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath + [key])
+        ) {
+        case .some(.boolTrue): return true
+        case .some(.boolFalse): return false
+        default: throw JSONParserError.decodingError(expected: type, keyPath: codingPath + [key])
         }
-        
-        switch jsonType {
-        case .boolTrue:
-            return true
-        case .boolFalse:
-            return false
-        default:
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath + [key])
-        }
-    }
-    
-    func floatingBounds(forKey key: Key) -> (Bounds, Bool)? {
-        return decoder.description.floatingBounds(
-            forKey: decoder.string(forKey: key),
-            convertingSnakeCasing: self.decoder.snakeCasing,
-            in: decoder.pointer
-        )
-    }
-    
-    func integerBounds(forKey key: Key) -> Bounds? {
-        return decoder.description.integerBounds(
-            forKey: decoder.string(forKey: key),
-            convertingSnakeCasing: self.decoder.snakeCasing,
-            in: decoder.pointer
-        )
     }
     
     func decode(_ type: String.Type, forKey key: Key) throws -> String {
@@ -366,6 +384,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         return string
     }
     
+    func decode(_ type: Float.Type, forKey key: Key) throws -> Float { return try Float(self.decode(Double.self, forKey: key)) }
     func decode(_ type: Double.Type, forKey key: Key) throws -> Double {
         guard
             let (bounds, floating) = floatingBounds(forKey: key),
@@ -376,65 +395,23 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         
         return double
     }
-    
-    func decode(_ type: Float.Type, forKey key: Key) throws -> Float {
-        guard
-            let (bounds, floating) = floatingBounds(forKey: key),
-            let double = bounds.makeDouble(from: decoder.pointer, floating: floating)
-        else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
-        }
         
-        return Float(double)
-    }
-    
     func decodeInt<F: FixedWidthInteger>(_ type: F.Type, forKey key: Key) throws -> F {
-        if let bounds = integerBounds(forKey: key), let int = bounds.makeInt(from: decoder.pointer) {
-            return try int.convert(to: F.self)
+        guard let result = try integerBounds(forKey: key)?.makeInt(from: decoder.pointer)?.convert(to: F.self) else {
+            throw JSONParserError.decodingError(expected: F.self, keyPath: codingPath)
         }
-        
-        throw JSONParserError.decodingError(expected: F.self, keyPath: codingPath)
+        return result
     }
-    
-    func decode(_ type: Int.Type, forKey key: Key) throws -> Int {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 {
-        return try decodeInt(type, forKey: key)
-    }
-    
-    func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 {
-        return try decodeInt(type, forKey: key)
-    }
+    func decode(_ type: Int.Type, forKey key: Key) throws -> Int { return try decodeInt(type, forKey: key) }
+    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt { return try decodeInt(type, forKey: key) }
+    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 { return try decodeInt(type, forKey: key) }
+    func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { return try decodeInt(type, forKey: key) }
     
     private func subDecoder<Key: CodingKey>(forKey key: Key, orThrow failureError: Error, appendingToPath: Bool = true) throws -> _JSONDecoder {
         guard let (_, offset) = self.decoder.description.valueOffset(
@@ -473,39 +450,29 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
 }
 
 fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
-    var codingPath: [CodingKey] {
-        return decoder.codingPath
-    }
     let decoder: _JSONDecoder
-    // Array descriptions are 17 bytes
-    var offset = 17
+    private var offset = 17 // Array descriptions are 17 bytes
+
+    var codingPath: [CodingKey] { decoder.codingPath }
     var currentIndex = 0
+    var count: Int?
+    var isAtEnd: Bool { currentIndex >= (count ?? 0) }
     
     init(decoder: _JSONDecoder) {
         self.decoder = decoder
-        self._count = decoder.description.arrayObjectCount()
-    }
-    
-    var _count: Int
-    var count: Int? {
-        return _count
-    }
-    
-    var isAtEnd: Bool {
-        return currentIndex >= _count
+        self.count = decoder.description.arrayObjectCount()
     }
     
     mutating func decodeNil() throws -> Bool {
+        if isAtEnd, decoder.settings.nilValueDecodingStrategy == .decodeNilForKeyNotFound { return true }
         try assertHasMore()
-        
-        let type = decoder.description.type(atOffset: offset)
-        
-        if type == .null {
-            skipValue()
-            return true
-        } else {
-            return false
+        guard decoder.description.type(atOffset: offset) == .null else { return false }
+
+        if decoder.settings.nilValueDecodingStrategy == .treatNilValuesAsMissing {
+            throw JSONParserError.decodingError(expected: Void?.self, keyPath: codingPath)
         }
+        skipValue()
+        return true
     }
     
     mutating func skipValue() {
@@ -519,6 +486,22 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         }
     }
     
+    mutating func decodeIfPresent(_ type: Bool.Type) throws -> Bool?     { return try self.decodeNil() ? nil : self.decode(Bool.self) }
+    mutating func decodeIfPresent(_ type: String.Type) throws -> String? { return try self.decodeNil() ? nil : self.decode(String.self) }
+    mutating func decodeIfPresent(_ type: Float.Type) throws -> Float?   { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Double.Type) throws -> Double? { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Int.Type) throws -> Int?       { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Int8.Type) throws -> Int8?     { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Int16.Type) throws -> Int16?   { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Int32.Type) throws -> Int32?   { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: Int64.Type) throws -> Int64?   { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: UInt.Type) throws -> UInt?     { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: UInt8.Type) throws -> UInt8?   { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: UInt16.Type) throws -> UInt16? { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: UInt32.Type) throws -> UInt32? { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent(_ type: UInt64.Type) throws -> UInt64? { return try self.decodeNil() ? nil : self.decode(type) }
+    mutating func decodeIfPresent<T>(_ type: T.Type) throws -> T? where T : Decodable { return try self.decodeNil() ? nil : self.decode(type) }
+    
     mutating func decode(_ type: Bool.Type) throws -> Bool {
         try assertHasMore()
         let type = decoder.description.type(atOffset: offset)
@@ -527,22 +510,14 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         switch type {
         case .boolTrue: return true
         case .boolFalse: return false
-        default:
-            throw JSONParserError.decodingError(expected: Bool.self, keyPath: codingPath)
+        default: throw JSONParserError.decodingError(expected: Bool.self, keyPath: codingPath)
         }
     }
     
     mutating func floatingBounds() -> (Bounds, Bool)? {
         if isAtEnd { return nil }
-        
         let type = decoder.description.type(atOffset: offset)
-        
-        guard
-            type == .integer || type == .floatingNumber
-        else {
-            return nil
-        }
-        
+        guard type == .integer || type == .floatingNumber else { return nil }
         let bounds = decoder.description.dataBounds(atIndexOffset: offset)
         skipValue()
         return (bounds, type == .floatingNumber)
@@ -550,13 +525,8 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     
     mutating func integerBounds() -> Bounds? {
         if isAtEnd { return nil }
-        
         let type = decoder.description.type(atOffset: offset)
-        
-        if type != .integer {
-            return nil
-        }
-        
+        guard type == .integer else { return nil }
         let bounds = decoder.description.dataBounds(atIndexOffset: offset)
         skipValue()
         return bounds
@@ -595,16 +565,7 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         return double
     }
     
-    mutating func decode(_ type: Float.Type) throws -> Float {
-        guard
-            let (bounds, floating) = floatingBounds(),
-            let double = bounds.makeDouble(from: decoder.pointer, floating: floating)
-        else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
-        }
-        
-        return Float(double)
-    }
+    mutating func decode(_ type: Float.Type) throws -> Float { return Float(try self.decode(Double.self)) }
     
     mutating func decodeInt<F: FixedWidthInteger>(_ type: F.Type) throws -> F {
         guard
@@ -617,48 +578,17 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
         return try int.convert(to: F.self)
     }
     
-    mutating func decode(_ type: Int.Type) throws -> Int {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: Int8.Type) throws -> Int8 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: Int16.Type) throws -> Int16 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: Int32.Type) throws -> Int32 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: Int64.Type) throws -> Int64 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: UInt.Type) throws -> UInt {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: UInt8.Type) throws -> UInt8 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: UInt16.Type) throws -> UInt16 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: UInt32.Type) throws -> UInt32 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode(_ type: UInt64.Type) throws -> UInt64 {
-        return try decodeInt(type)
-    }
-    
-    mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        let decoder = self.decoder.subDecoder(offsetBy: offset)
+    mutating func decode(_ type: Int.Type) throws -> Int       { return try decodeInt(type) }
+    mutating func decode(_ type: Int8.Type) throws -> Int8     { return try decodeInt(type) }
+    mutating func decode(_ type: Int16.Type) throws -> Int16   { return try decodeInt(type) }
+    mutating func decode(_ type: Int32.Type) throws -> Int32   { return try decodeInt(type) }
+    mutating func decode(_ type: Int64.Type) throws -> Int64   { return try decodeInt(type) }
+    mutating func decode(_ type: UInt.Type) throws -> UInt     { return try decodeInt(type) }
+    mutating func decode(_ type: UInt8.Type) throws -> UInt8   { return try decodeInt(type) }
+    mutating func decode(_ type: UInt16.Type) throws -> UInt16 { return try decodeInt(type) }
+    mutating func decode(_ type: UInt32.Type) throws -> UInt32 { return try decodeInt(type) }
+    mutating func decode(_ type: UInt64.Type) throws -> UInt64 { return try decodeInt(type) }
+    mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable { let decoder = self.decoder.subDecoder(offsetBy: offset)
         skipValue()
         return try decoder.decode(type)
     }
@@ -683,31 +613,20 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
 }
 
 fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContainer {
-    var codingPath: [CodingKey] {
-        return decoder.codingPath
-    }
+    var codingPath: [CodingKey] { decoder.codingPath }
     let decoder: _JSONDecoder
     
-    func decodeNil() -> Bool {
-        return decoder.description.topLevelType == .null
-    }
+    func decodeNil() -> Bool { return decoder.description.topLevelType == .null }
     
     func floatingBounds() -> (Bounds, Bool)? {
         let type = decoder.description.topLevelType
-        
-        if type != .integer && type != .floatingNumber {
-            return nil
-        }
-        
+        guard type == .integer || type == .floatingNumber else { return nil }
         let bounds = decoder.description.dataBounds(atIndexOffset: 0)
         return (bounds, type == .floatingNumber)
     }
     
     func integerBounds() -> Bounds? {
-        if decoder.description.topLevelType != .integer {
-            return nil
-        }
-        
+        guard decoder.description.topLevelType == .integer else { return nil }
         return decoder.description.dataBounds(atIndexOffset: 0)
     }
     
@@ -721,13 +640,10 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
     
     func decode(_ type: String.Type) throws -> String {
         let jsonType = decoder.description.topLevelType
-        
         guard jsonType == .string || jsonType == .stringWithEscaping else {
             throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
         }
-        
         let bounds = decoder.description.dataBounds(atIndexOffset: 0)
-        
         guard let string = bounds.makeString(
             from: decoder.pointer,
             escaping: jsonType == .stringWithEscaping,
@@ -735,7 +651,6 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         ) else {
             throw JSONParserError.decodingError(expected: String.self, keyPath: codingPath)
         }
-        
         return string
     }
     
@@ -750,76 +665,27 @@ fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContaine
         return double
     }
     
-    func decode(_ type: Float.Type) throws -> Float {
-        guard
-            let (bounds, floating) = floatingBounds(),
-            let double = bounds.makeDouble(from: decoder.pointer, floating: floating)
-        else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
-        }
-        
-        return Float(double)
-    }
-    
-    func decode(_ type: Int.Type) throws -> Int {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: Int8.Type) throws -> Int8 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: Int16.Type) throws -> Int16 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: Int32.Type) throws -> Int32 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: Int64.Type) throws -> Int64 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: UInt.Type) throws -> UInt {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: UInt8.Type) throws -> UInt8 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: UInt16.Type) throws -> UInt16 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: UInt32.Type) throws -> UInt32 {
-        return try decodeInt(ofType: type)
-    }
-    
-    func decode(_ type: UInt64.Type) throws -> UInt64 {
-        return try decodeInt(ofType: type)
-    }
+    func decode(_ type: Float.Type) throws -> Float { return try Float(decode(Double.self)) }
     
     func decodeInt<F: FixedWidthInteger>(ofType type: F.Type) throws -> F {
         let jsonType = decoder.description.topLevelType
-        
-        guard jsonType == .integer else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
-        }
-        
+        guard jsonType == .integer else { throw JSONParserError.decodingError(expected: type, keyPath: codingPath) }
         let bounds = decoder.description.dataBounds(atIndexOffset: 0)
-        
-        guard let int = bounds.makeInt(from: self.decoder.pointer) else {
-            throw JSONParserError.decodingError(expected: type, keyPath: codingPath)
-        }
-        
+        guard let int = bounds.makeInt(from: self.decoder.pointer) else { throw JSONParserError.decodingError(expected: type, keyPath: codingPath) }
         return try int.convert(to: type)
     }
-    
-    func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        return try decoder.decode(type)
-    }
+ 
+    func decode(_ type: Int.Type) throws -> Int { return try decodeInt(ofType: type) }
+    func decode(_ type: Int8.Type) throws -> Int8 { return try decodeInt(ofType: type) }
+    func decode(_ type: Int16.Type) throws -> Int16 { return try decodeInt(ofType: type) }
+    func decode(_ type: Int32.Type) throws -> Int32 { return try decodeInt(ofType: type) }
+    func decode(_ type: Int64.Type) throws -> Int64 { return try decodeInt(ofType: type) }
+    func decode(_ type: UInt.Type) throws -> UInt { return try decodeInt(ofType: type) }
+    func decode(_ type: UInt8.Type) throws -> UInt8 { return try decodeInt(ofType: type) }
+    func decode(_ type: UInt16.Type) throws -> UInt16 { return try decodeInt(ofType: type) }
+    func decode(_ type: UInt32.Type) throws -> UInt32 { return try decodeInt(ofType: type) }
+    func decode(_ type: UInt64.Type) throws -> UInt64 { return try decodeInt(ofType: type) }
+    func decode<T>(_ type: T.Type) throws -> T where T : Decodable { return try decoder.decode(type) }
 }
 
 extension FixedWidthInteger {

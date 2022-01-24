@@ -19,8 +19,6 @@ public struct JSONEncoderSettings {
     
     /// If a `nil` value is found, setting this to `true` will encode `null`. Otherwise the key is omitted.
     ///
-    /// This is `false` by default
-    ///
     /// - Warning: This property is deprecated. Use `nilValueEncodingStrategy` instead. This property
     ///   will return true if the strategy is `.alwaysEncodeNil`, false otherwise. Setting this property
     ///   to true selects the `.alwaysEncodeNil` strategy. Setting this property to false selects the

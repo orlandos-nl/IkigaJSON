@@ -1447,7 +1447,7 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testNilValueEncodingStrategies() throws {
-        struct Foo: Codable {
+        struct Foo: Codable, Equatable {
             let foo1: Int?
             let foo2: Int?
             let foo3: Int?
@@ -1497,5 +1497,25 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(String(decoding: try encoder.encode(foob2), as: UTF8.self), #"{"foo2":0,"foo3":0}"#)
         XCTAssertEqual(String(decoding: try encoder.encode(foob3), as: UTF8.self), #"{"foo1":0,"foo3":0}"#)
         XCTAssertEqual(String(decoding: try encoder.encode(foob4), as: UTF8.self), #"{"foo1":0,"foo2":0}"#)
+        
+        let decoder = IkigaJSONDecoder()
+        
+        decoder.settings.nilValueDecodingStrategy = .default
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":0}"#)), foob1)
+        XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo2":0,"foo3":0}"#)))
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":null,"foo3":0}"#)), foob3)
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":null}"#)), foob4)
+
+        decoder.settings.nilValueDecodingStrategy = .decodeNilForKeyNotFound
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":0}"#)), foob1)
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":null,"foo2":0,"foo3":0}"#)), foob2)
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":null,"foo3":0}"#)), foob3)
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":null}"#)), foob4)
+
+        decoder.settings.nilValueDecodingStrategy = .treatNilValuesAsMissing
+        XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":0}"#)), foob1)
+        XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo2":0,"foo3":0}"#)))
+        XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo3":0}"#)))
+        XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0}"#)))
     }
 }
