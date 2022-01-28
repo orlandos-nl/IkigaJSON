@@ -20,8 +20,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v2
       - name: Run tests
-        # Currently, Foundation performance is better, so let's skip it for now
-        run: swift test --skip 'testCodablePerformance'
+        run: swift test -c release
   test-macos:
     strategy:
       fail-fast: false
@@ -38,5 +37,4 @@ jobs:
       - name: Check out
         uses: actions/checkout@v2
       - name: Run tests
-        # Currently, Foundation performance is better, so let's skip it for now
-        run: swift test --skip 'testCodablePerformance'
+        run: swift test -c release
