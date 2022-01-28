@@ -139,6 +139,7 @@ public final class IkigaJSONDecoder {
     /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable, S: StringProtocol>(_: D.Type, from string: S) throws -> D {
         // `.withUTF8()` is mutating, so can't use it here, use UTF8View to go through the Sequence overload
+        
         return try self.decode(D.self, from: string.utf8)
     }
     
