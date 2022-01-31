@@ -26,7 +26,7 @@ Cocoapods:
 ```cocoapods
 pod 'IkigaJSON', '~> 1.0'
 # Or, for SwiftNIO 2
-pod 'IkigaJSON', '~> 1.0'
+pod 'IkigaJSON', '~> 2.0'
 ```
 
 ### Usage
