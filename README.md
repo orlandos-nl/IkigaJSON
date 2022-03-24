@@ -16,9 +16,9 @@ The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use t
 SPM:
 
 ```swift
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.0.0"),
+.package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "1.0.0"),
 // Or, for SwiftNIO 2
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "2.0.0"),
+.package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "2.0.0"),
 ```
 
 Cocoapods:
@@ -144,11 +144,6 @@ This allocation (called the JSONDescription) acts as a filter over the original 
 - Raw JSON APIs (non-codable)
 - Codable decoding from `JSONObject` and `JSONArray`
 - `\u` escaped unicode characters
-
-TODO:
-
-- JSON error accumulation
-- Lightweight JSON inline comparison helpers
 
 ### Media
 
