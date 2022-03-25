@@ -5,7 +5,7 @@ Aside from being more performant, IkigaJSON has a much lower and more stable mem
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
-[Read the Docs](https://orlandos.nl/docs/mongoqueue)
+[Read the Docs](https://orlandos.nl/docs/ikigajson)
 
 ### Server-Side Swift
 
