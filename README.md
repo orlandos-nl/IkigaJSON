@@ -5,6 +5,8 @@ Aside from being more performant, IkigaJSON has a much lower and more stable mem
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
+[Read the Docs](https://orlandos.nl/docs/mongoqueue)
+
 ### Server-Side Swift
 
 The above statement was tested on Foundation for macOS and iOS. If you're using Swift on Linux with Swift 5.5, your performance is slightly better if you use the new Foundation for Linux. Swift 5.5 does not improve Foundation's JSON performance on macOS or iOS.
