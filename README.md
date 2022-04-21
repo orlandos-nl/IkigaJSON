@@ -5,6 +5,8 @@ Aside from being more performant, IkigaJSON has a much lower and more stable mem
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
+[Read the Docs](https://orlandos.nl/docs/ikigajson)
+
 ### Server-Side Swift
 
 The above statement was tested on Foundation for macOS and iOS. If you're using Swift on Linux with Swift 5.5, your performance is slightly better if you use the new Foundation for Linux. Swift 5.5 does not improve Foundation's JSON performance on macOS or iOS.
@@ -16,9 +18,9 @@ The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use t
 SPM:
 
 ```swift
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "1.0.0"),
+.package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "1.0.0"),
 // Or, for SwiftNIO 2
-.package(url: "https://github.com/Ikiga/IkigaJSON.git", from: "2.0.0"),
+.package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "2.0.0"),
 ```
 
 Cocoapods:
@@ -144,11 +146,6 @@ This allocation (called the JSONDescription) acts as a filter over the original 
 - Raw JSON APIs (non-codable)
 - Codable decoding from `JSONObject` and `JSONArray`
 - `\u` escaped unicode characters
-
-TODO:
-
-- JSON error accumulation
-- Lightweight JSON inline comparison helpers
 
 ### Media
 
