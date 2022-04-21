@@ -172,6 +172,16 @@ public final class IkigaJSONDecoder {
             return (parser.currentOffset, type)
         }
     }
+    
+    internal func decode<D: Decodable>(
+        _ type: D.Type,
+        from buffer: UnsafeBufferPointer<UInt8>,
+        parser: JSONParser,
+        settings: JSONDecoderSettings = JSONDecoderSettings()
+    ) throws -> D {
+        let decoder = _JSONDecoder(description: parser.description, pointer: buffer.baseAddress!, settings: settings)
+        return try D(from: decoder)
+    }
 }
 
 fileprivate struct _JSONDecoder: Decoder {
@@ -339,21 +349,37 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         }
     }
     
-    func decodeIfPresent(_ type: Bool.Type, forKey key: Key) throws -> Bool?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: String.Type, forKey key: Key) throws -> String? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Float.Type, forKey key: Key) throws -> Float?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Double.Type, forKey key: Key) throws -> Double? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Int.Type, forKey key: Key) throws -> Int?       { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Int8.Type, forKey key: Key) throws -> Int8?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Int16.Type, forKey key: Key) throws -> Int16?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Int32.Type, forKey key: Key) throws -> Int32?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: Int64.Type, forKey key: Key) throws -> Int64?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: UInt.Type, forKey key: Key) throws -> UInt?     { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: UInt8.Type, forKey key: Key) throws -> UInt8?   { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: UInt16.Type, forKey key: Key) throws -> UInt16? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: UInt32.Type, forKey key: Key) throws -> UInt32? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent(_ type: UInt64.Type, forKey key: Key) throws -> UInt64? { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
-    func decodeIfPresent<T>(_ type: T.Type, forKey key: Key) throws -> T? where T : Decodable { return try self.decodeNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresentNil(forKey key: Key) throws -> Bool {
+        switch (
+            decoder.settings.nilValueDecodingStrategy,
+            decoder.description.type(
+                ofKey: decoder.string(forKey: key),
+                convertingSnakeCasing: self.decoder.snakeCasing,
+                in: decoder.pointer
+            )
+        ) {
+        case (.treatNilValuesAsMissing, .none), (.treatNilValuesAsMissing, .some(.null)):
+            throw JSONParserError.decodingError(expected: Void?.self, keyPath: codingPath + [key])
+        case (.default, .none), (.decodeNilForKeyNotFound, .none), (_, .some(.null)): return true
+        default: return false
+        }
+    }
+    
+    func decodeIfPresent(_ type: Bool.Type, forKey key: Key) throws -> Bool?     { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: String.Type, forKey key: Key) throws -> String? { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Float.Type, forKey key: Key) throws -> Float?   { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Double.Type, forKey key: Key) throws -> Double? { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int.Type, forKey key: Key) throws -> Int?       { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int8.Type, forKey key: Key) throws -> Int8?     { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int16.Type, forKey key: Key) throws -> Int16?   { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int32.Type, forKey key: Key) throws -> Int32?   { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: Int64.Type, forKey key: Key) throws -> Int64?   { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt.Type, forKey key: Key) throws -> UInt?     { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt8.Type, forKey key: Key) throws -> UInt8?   { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt16.Type, forKey key: Key) throws -> UInt16? { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt32.Type, forKey key: Key) throws -> UInt32? { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent(_ type: UInt64.Type, forKey key: Key) throws -> UInt64? { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
+    func decodeIfPresent<T>(_ type: T.Type, forKey key: Key) throws -> T? where T : Decodable { return try self.decodeIfPresentNil(forKey: key) ? nil : self.decode(type, forKey: key) }
     
     func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
         switch decoder.description.type(

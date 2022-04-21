@@ -72,6 +72,29 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
     }
     
+    func testDecodeOptionalUUID() throws {
+        struct Account {
+            typealias IDValue = UUID
+        }
+        
+        struct LoginRequest: Codable {
+            let accountId: Account.IDValue? // This is a UUID
+        }
+        
+        let id = UUID().uuidString
+        
+        let object: JSONObject = [
+            "accountId": id
+        ]
+        
+        let decoder = IkigaJSONDecoder()
+        var request = try decoder.decode(LoginRequest.self, from: object.string)
+        XCTAssertEqual(request.accountId?.uuidString, id)
+        
+        request = try decoder.decode(LoginRequest.self, from: "{}")
+        XCTAssertNil(request.accountId)
+    }
+    
     func testArrayDoS() throws {
         let json = "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],]"
         
