@@ -18,6 +18,7 @@ The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use t
 SPM:
 
 ```swift
+// SwiftNIO 1.x
 .package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "1.0.0"),
 // Or, for SwiftNIO 2
 .package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "2.0.0"),
