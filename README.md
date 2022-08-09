@@ -1,7 +1,8 @@
 # IkigaJSON
 
 IkigaJSON is a really fast JSON parser. It performed ~4x faster than Foundation in our tests when decoding a type from JSON.
-Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too!
+
+Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too! By design, IkigaJSON scales better on larger JSON payloads than most other JSON implementations. All while providing an easy to use API with Codable support.
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
