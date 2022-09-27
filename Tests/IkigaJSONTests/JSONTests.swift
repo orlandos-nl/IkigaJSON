@@ -1118,6 +1118,10 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(object["key"] as? Double, 3.14)
         object["key"] = nil
         
+        object["key"] = -3.14
+        XCTAssertEqual(object["key"] as? Double, -3.14)
+        object["key"] = nil
+        
         object["key"] = NSNull()
         XCTAssert(object["key"] is NSNull)
         object["key"] = nil
