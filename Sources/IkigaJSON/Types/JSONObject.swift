@@ -15,7 +15,57 @@ import NIO
 ///
 /// To create a JSONObject with no key-value pairs, use an empty dictionary literal (`[:]`)
 /// or use the empty initializer (`JSONObject()`)
-public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence {
+public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable {
+    public static func == (lhs: JSONObject, rhs: JSONObject) -> Bool {
+        for t in lhs {
+            if let cl = t.1 as? JSONObject, let cr = rhs[t.0] as? JSONObject {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1 as? JSONArray, let cr = rhs[t.0] as? JSONArray {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.int, let cr = rhs[t.0]?.int {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.double, let cr = rhs[t.0]?.double {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.int, let cr = rhs[t.0]?.double {
+                if Double(cl) == cr { continue } else { return false }
+            } else if let cl = t.1.double, let cr = rhs[t.0]?.int {
+                if cl == Double(cr) { continue } else { return false }
+            } else if let cl = t.1.bool, let cr = rhs[t.0]?.bool {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.string, let cr = rhs[t.0]?.string {
+                if cl == cr { continue } else { return false }
+            } else if t.1.null != nil, rhs[t.0]?.null != nil {
+                continue
+            } else {
+                return false
+            }
+        }
+        for t in rhs {
+            if let cl = t.1 as? JSONObject, let cr = lhs[t.0] as? JSONObject {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1 as? JSONArray, let cr = lhs[t.0] as? JSONArray {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.int, let cr = lhs[t.0]?.int {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.double, let cr = lhs[t.0]?.double {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.int, let cr = lhs[t.0]?.double {
+                if Double(cl) == cr { continue } else { return false }
+            } else if let cl = t.1.double, let cr = lhs[t.0]?.int {
+                if cl == Double(cr) { continue } else { return false }
+            } else if let cl = t.1.bool, let cr = lhs[t.0]?.bool {
+                if cl == cr { continue } else { return false }
+            } else if let cl = t.1.string, let cr = lhs[t.0]?.string {
+                if cl == cr { continue } else { return false }
+            } else if t.1.null != nil, lhs[t.0]?.null != nil {
+                continue
+            } else {
+                return false
+            }
+        }
+        return true
+    }
+    
     /// The raw textual (JSON formatted) representation of this JSONObject
     public internal(set) var jsonBuffer: ByteBuffer
     
