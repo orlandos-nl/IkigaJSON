@@ -13,54 +13,15 @@ import NIO
 /// or use the empty initializer (`JSONArray()`)
 public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
     public static func == (lhs: JSONArray, rhs: JSONArray) -> Bool {
-        for i in 0..<lhs.count {
-            if let cl = lhs[i] as? JSONObject, let cr = rhs[i] as? JSONObject {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i] as? JSONArray, let cr = rhs[i] as? JSONArray {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].int, let cr = rhs[i].int {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].double, let cr = rhs[i].double {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].int, let cr = rhs[i].double {
-                if Double(cl) == cr { continue } else { return false }
-            } else if let cl = lhs[i].double, let cr = rhs[i].int {
-                if cl == Double(cr) { continue } else { return false }
-            }   else if let cl = lhs[i].bool, let cr = rhs[i].bool {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].string, let cr = rhs[i].string {
-                if cl == cr { continue } else { return false }
-            } else if lhs[i].null != nil, rhs[i].null != nil {
-                continue
-            }
-            else {
-                return false
-            }
+        let lhsCount = lhs.count
+        guard lhsCount == rhs.count else {
+            return false
         }
-        for i in 0..<rhs.count {
-            if let cl = lhs[i] as? JSONObject, let cr = lhs[i] as? JSONObject {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i] as? JSONArray, let cr = lhs[i] as? JSONArray {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].int, let cr = lhs[i].int {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].double, let cr = lhs[i].double {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].int, let cr = lhs[i].double {
-                if Double(cl) == cr { continue } else { return false }
-            } else if let cl = lhs[i].double, let cr = lhs[i].int {
-                if cl == Double(cr) { continue } else { return false }
-            }   else if let cl = lhs[i].bool, let cr = lhs[i].bool {
-                if cl == cr { continue } else { return false }
-            } else if let cl = lhs[i].string, let cr = lhs[i].string {
-                if cl == cr { continue } else { return false }
-            } else if lhs[i].null != nil, lhs[i].null != nil {
-                continue
-            }
-            else {
-                return false
-            }
+        
+        for i in 0..<lhsCount where !equateJSON(lhs[i], rhs[i]) {
+            return false
         }
+        
         return true
     }
     

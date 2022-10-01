@@ -1,6 +1,31 @@
 import Foundation
 import NIO
 
+internal func equateJSON(_ lhs: JSONValue?, _ rhs: JSONValue?) -> Bool {
+    switch (lhs, rhs) {
+    case let (lhs as String, rhs as String):
+        return lhs == rhs
+    case let (lhs as Double, rhs as Double):
+        return lhs == rhs
+    case let (lhs as Int, rhs as Int):
+        return lhs == rhs
+    case let (lhs as Double, rhs as Int):
+        return lhs == Double(rhs)
+    case let (lhs as Int, rhs as Double):
+        return Double(lhs) == rhs
+    case let (lhs as Bool, rhs as Bool):
+        return lhs == rhs
+    case let (lhs as JSONObject, rhs as JSONObject):
+        return lhs == rhs
+    case let (lhs as JSONArray, rhs as JSONArray):
+        return lhs == rhs
+    case (.none, .none):
+        return true
+    default:
+        return false
+    }
+}
+
 /// A JSON Dictionary, or collection whose elements are key-value pairs.
 ///
 /// A JSONObject is always keyed by a String and only supports a predefined set of JSON Primitives for values.
@@ -17,52 +42,17 @@ import NIO
 /// or use the empty initializer (`JSONObject()`)
 public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable {
     public static func == (lhs: JSONObject, rhs: JSONObject) -> Bool {
-        for t in lhs {
-            if let cl = t.1 as? JSONObject, let cr = rhs[t.0] as? JSONObject {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1 as? JSONArray, let cr = rhs[t.0] as? JSONArray {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.int, let cr = rhs[t.0]?.int {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.double, let cr = rhs[t.0]?.double {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.int, let cr = rhs[t.0]?.double {
-                if Double(cl) == cr { continue } else { return false }
-            } else if let cl = t.1.double, let cr = rhs[t.0]?.int {
-                if cl == Double(cr) { continue } else { return false }
-            } else if let cl = t.1.bool, let cr = rhs[t.0]?.bool {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.string, let cr = rhs[t.0]?.string {
-                if cl == cr { continue } else { return false }
-            } else if t.1.null != nil, rhs[t.0]?.null != nil {
-                continue
-            } else {
-                return false
-            }
+        let lhsKeys = lhs.keys
+        let rhsKeys = rhs.keys
+        
+        guard lhsKeys == rhsKeys else {
+            return false
         }
-        for t in rhs {
-            if let cl = t.1 as? JSONObject, let cr = lhs[t.0] as? JSONObject {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1 as? JSONArray, let cr = lhs[t.0] as? JSONArray {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.int, let cr = lhs[t.0]?.int {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.double, let cr = lhs[t.0]?.double {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.int, let cr = lhs[t.0]?.double {
-                if Double(cl) == cr { continue } else { return false }
-            } else if let cl = t.1.double, let cr = lhs[t.0]?.int {
-                if cl == Double(cr) { continue } else { return false }
-            } else if let cl = t.1.bool, let cr = lhs[t.0]?.bool {
-                if cl == cr { continue } else { return false }
-            } else if let cl = t.1.string, let cr = lhs[t.0]?.string {
-                if cl == cr { continue } else { return false }
-            } else if t.1.null != nil, lhs[t.0]?.null != nil {
-                continue
-            } else {
-                return false
-            }
+        
+        for key in lhsKeys where !equateJSON(lhs[key], rhs[key]) {
+            return false
         }
+        
         return true
     }
     
