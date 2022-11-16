@@ -70,10 +70,6 @@ extension IkigaJSONDecoder: ContentDecoder {
         from body: ByteBuffer,
         headers: HTTPHeaders
     ) throws -> D {
-        guard headers.contentType == .json || headers.contentType == .jsonAPI else {
-            throw Abort(.unsupportedMediaType)
-        }
-        
         return try self.decode(D.self, from: body)
     }
 }
