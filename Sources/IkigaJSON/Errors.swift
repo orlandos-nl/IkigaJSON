@@ -57,7 +57,7 @@ public enum JSONParserError: Error, CustomStringConvertible {
         }
     }
     
-    var column: Int? {
+    public var column: Int? {
         switch self {
         case .expectedObject, .expectedArray:
             return nil
@@ -84,7 +84,7 @@ public enum JSONParserError: Error, CustomStringConvertible {
         }
     }
     
-    var line: Int? {
+    public var line: Int? {
         switch self {
         case .expectedObject, .expectedArray:
             return nil

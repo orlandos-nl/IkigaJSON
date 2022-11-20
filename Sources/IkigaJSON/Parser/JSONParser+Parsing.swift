@@ -227,18 +227,22 @@ extension JSONParser {
             // If it's a quote, check if it's escaped
             if byte == .quote {
                 var escaped = false
-                var backwardsOffset = currentIndex &- 1
                 
-                // Every escaped character can have another escaped character
-                escapeLoop: while backwardsOffset >= 1 {
-                    defer { backwardsOffset = backwardsOffset &- 1 }
+                if didEscape {
+                    // No need to run this logic if no escape symbol was present
+                    var backwardsOffset = currentIndex &- 1
                     
-                    if pointer[backwardsOffset] == .backslash {
-                        // TODO: Is this the fastest way?
-                        // An integer incrementing that `& 1 == 1` is also escaped, likely more solutions
-                        escaped = !escaped
-                    } else {
-                        break escapeLoop
+                    // Every escaped character can have another escaped character
+                    escapeLoop: while backwardsOffset >= 1 {
+                        defer { backwardsOffset = backwardsOffset &- 1 }
+                        
+                        if pointer[backwardsOffset] == .backslash {
+                            // TODO: Is this the fastest way?
+                            // An integer incrementing that `& 1 == 1` is also escaped, likely more solutions
+                            escaped = !escaped
+                        } else {
+                            break escapeLoop
+                        }
                     }
                 }
                 
