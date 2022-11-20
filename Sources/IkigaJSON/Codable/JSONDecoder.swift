@@ -69,7 +69,6 @@ public struct JSONDecoderSettings {
 public final class IkigaJSONDecoder {
     /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
-    private var parser: JSONParser!
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
         self.settings = settings
@@ -80,14 +79,10 @@ public final class IkigaJSONDecoder {
     /// This can save a lot of performance.
     public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
         let pointer = buffer.baseAddress!
-        if parser == nil {
-            parser = JSONParser(pointer: pointer, count: buffer.count)
-        } else {
-            parser.recycle(pointer: pointer, count: buffer.count)
-        }
+        var parser = JSONParser(pointer: pointer, count: buffer.count)
         try parser.scanValue()
         
-        let decoder = _JSONDecoder(description: parser!.description, pointer: pointer, settings: settings)
+        let decoder = _JSONDecoder(description: parser.description, pointer: pointer, settings: settings)
         let type = try D(from: decoder)
         return type
     }
@@ -160,14 +155,10 @@ public final class IkigaJSONDecoder {
         return try buffer.readWithUnsafeMutableReadableBytes { buffer -> (Int, D) in
             let buffer = buffer.bindMemory(to: UInt8.self)
             let pointer = buffer.baseAddress!
-            if self.parser == nil {
-                parser = JSONParser(pointer: pointer, count: buffer.count)
-            } else {
-                parser.recycle(pointer: pointer, count: buffer.count)
-            }
+            var parser = JSONParser(pointer: pointer, count: buffer.count)
             try parser.scanValue()
             
-            let decoder = _JSONDecoder(description: parser!.description, pointer: pointer, settings: settings)
+            let decoder = _JSONDecoder(description: parser.description, pointer: pointer, settings: settings)
             let type = try D(from: decoder)
             return (parser.currentOffset, type)
         }
