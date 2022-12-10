@@ -1,6 +1,6 @@
 # IkigaJSON
 
-IkigaJSON is a really fast JSON parser. It performed ~4x faster than Foundation in our tests when decoding a type from JSON.
+IkigaJSON is a really fast JSON parser. It performed ~4x faster than macOS/iOS Foundation in our tests when decoding a type from JSON.
 
 Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too! By design, IkigaJSON scales better on larger JSON payloads than most other JSON implementations. All while providing an easy to use API with Codable support.
 
@@ -16,21 +16,11 @@ The above performance statement was tested on Foundation for macOS and iOS. If y
 
 The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use the 2.x versions of IkigaJSON.
 
-SPM:
-
 ```swift
 // SwiftNIO 1.x
 .package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "1.0.0"),
 // Or, for SwiftNIO 2
 .package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "2.0.0"),
-```
-
-Cocoapods:
-
-```cocoapods
-pod 'IkigaJSON', '~> 1.0'
-# Or, for SwiftNIO 2
-pod 'IkigaJSON', '~> 2.0'
 ```
 
 ### Usage
