@@ -220,6 +220,7 @@ public struct IkigaJSONEncoder {
         return data
     }
     
+    /// Encodes the provided value as JSON into the given buffer.
     public func encodeAndWrite<E: Encodable>(_ value: E, into buffer: inout ByteBuffer) throws {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
@@ -229,6 +230,8 @@ public struct IkigaJSONEncoder {
         encoder.cleanUp()
     }
     
+    /// Encodes the provided value as JSON and returns a JSON Object.
+    /// If the value is not a JSON Object, an error is thrown.
     public func encodeJSONObject<E: Encodable>(from value: E) throws -> JSONObject {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
@@ -239,6 +242,8 @@ public struct IkigaJSONEncoder {
         return object
     }
     
+    /// Encodes the provided value as JSON and returns a JSON Array.
+    /// If the value is not a JSON Array, an error is thrown.
     public func encodeJSONArray<E: Encodable>(from value: E) throws -> JSONArray {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)

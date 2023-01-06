@@ -33,7 +33,7 @@ struct User: Codable {
     let name: String
 }
 
-let data = Data()
+let data: Data = ...
 var decoder = IkigaJSONDecoder()
 let user = try decoder.decode(User.self, from: data)
 ```

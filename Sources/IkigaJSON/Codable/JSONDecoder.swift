@@ -82,7 +82,7 @@ public final class IkigaJSONDecoder {
         var parser = JSONParser(pointer: pointer, count: buffer.count)
         try parser.scanValue()
         
-        let decoder = _JSONDecoder(description: parser.description, pointer: pointer, settings: settings)
+        let decoder = _JSONDecoder(description: parser.description, codingPath: [], pointer: pointer, settings: settings)
         let type = try D(from: decoder)
         return type
     }
@@ -99,6 +99,7 @@ public final class IkigaJSONDecoder {
         return try object.jsonBuffer.withUnsafeReadableBytes { buffer in
             let decoder = _JSONDecoder(
                 description: object.description,
+                codingPath: [],
                 pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
                 settings: settings
             )
@@ -112,6 +113,7 @@ public final class IkigaJSONDecoder {
         return try array.jsonBuffer.withUnsafeReadableBytes { buffer in
             let decoder = _JSONDecoder(
                 description: array.description,
+                codingPath: [],
                 pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
                 settings: settings
             )
@@ -158,7 +160,7 @@ public final class IkigaJSONDecoder {
             var parser = JSONParser(pointer: pointer, count: buffer.count)
             try parser.scanValue()
             
-            let decoder = _JSONDecoder(description: parser.description, pointer: pointer, settings: settings)
+            let decoder = _JSONDecoder(description: parser.description, codingPath: [], pointer: pointer, settings: settings)
             let type = try D(from: decoder)
             return (parser.currentOffset, type)
         }
@@ -170,7 +172,7 @@ public final class IkigaJSONDecoder {
         parser: JSONParser,
         settings: JSONDecoderSettings = JSONDecoderSettings()
     ) throws -> D {
-        let decoder = _JSONDecoder(description: parser.description, pointer: buffer.baseAddress!, settings: settings)
+        let decoder = _JSONDecoder(description: parser.description, codingPath: [], pointer: buffer.baseAddress!, settings: settings)
         return try D(from: decoder)
     }
 }
@@ -181,7 +183,7 @@ fileprivate struct _JSONDecoder: Decoder {
     let settings: JSONDecoderSettings
     var snakeCasing: Bool
     
-    var codingPath = [CodingKey]()
+    var codingPath: [CodingKey]
     var userInfo: [CodingUserInfoKey : Any] {
         return settings.userInfo
     }
@@ -215,9 +217,10 @@ fileprivate struct _JSONDecoder: Decoder {
         return SingleValueJSONDecodingContainer(decoder: self)
     }
     
-    init(description: JSONDescription, pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
+    init(description: JSONDescription, codingPath: [CodingKey], pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
         self.description = description
         self.pointer = pointer
+        self.codingPath = codingPath
         self.settings = settings
         
         if case .convertFromSnakeCase = settings.keyDecodingStrategy {
@@ -229,7 +232,7 @@ fileprivate struct _JSONDecoder: Decoder {
     
     func subDecoder(offsetBy offset: Int) -> _JSONDecoder {
         let subDescription = self.description.subDescription(offset: offset)
-        return _JSONDecoder(description: subDescription, pointer: pointer, settings: settings)
+        return _JSONDecoder(description: subDescription, codingPath: codingPath, pointer: pointer, settings: settings)
     }
     
     func decode<D: Decodable>(_ type: D.Type) throws -> D {
@@ -441,7 +444,9 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         ) else {
             throw failureError
         }
-        return self.decoder.subDecoder(offsetBy: offset)
+        var subDecoder = self.decoder.subDecoder(offsetBy: offset)
+        subDecoder.codingPath.append(key)
+        return subDecoder
     }
     
     func decode<T>(_: T.Type, forKey key: Key) throws -> T where T : Decodable {
