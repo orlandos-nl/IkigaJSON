@@ -54,12 +54,14 @@ public enum JSONParserError: Error, CustomStringConvertible {
             return "Missing token '\(Character(.init(uInt8)))': \(reason)"
         case .unexpectedToken(_, _, let uInt8, let reason):
             return "Unexpected token '\(Character(.init(uInt8)))': \(reason)"
+        case .unexpectedEscapingToken:
+            return "Unexpected escaping token"
         }
     }
     
     public var column: Int? {
         switch self {
-        case .expectedObject, .expectedArray:
+        case .expectedObject, .expectedArray, .unexpectedEscapingToken:
             return nil
         case .internalStateError(_, column: let column):
             return column
@@ -86,7 +88,7 @@ public enum JSONParserError: Error, CustomStringConvertible {
     
     public var line: Int? {
         switch self {
-        case .expectedObject, .expectedArray:
+        case .expectedObject, .expectedArray, .unexpectedEscapingToken:
             return nil
         case .internalStateError(line: let line, _):
             return line
@@ -129,6 +131,7 @@ public enum JSONParserError: Error, CustomStringConvertible {
     case invalidObjectIdLiteral(line: Int, column: Int)
     case missingToken(line: Int, column: Int, token: UInt8, reason: Reason)
     case unexpectedToken(line: Int, column: Int, token: UInt8, reason: Reason)
+    case unexpectedEscapingToken
 }
 
 internal struct TypeConversionError<F: FixedWidthInteger>: Error {
