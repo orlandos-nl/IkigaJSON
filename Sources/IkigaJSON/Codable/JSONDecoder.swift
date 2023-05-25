@@ -436,7 +436,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 { return try decodeInt(type, forKey: key) }
     func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { return try decodeInt(type, forKey: key) }
     
-    private func subDecoder<Key: CodingKey>(forKey key: Key, orThrow failureError: Error, appendingToPath: Bool = true) throws -> _JSONDecoder {
+    private func subDecoder<NestedKey: CodingKey>(forKey key: NestedKey, orThrow failureError: Error, appendingToPath: Bool = true) throws -> _JSONDecoder {
         guard let (_, offset) = self.decoder.description.valueOffset(
             forKey: self.decoder.string(forKey: key),
             convertingSnakeCasing: self.decoder.snakeCasing,
