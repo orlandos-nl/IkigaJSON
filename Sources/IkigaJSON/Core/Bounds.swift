@@ -48,7 +48,6 @@ internal struct Bounds {
             func flushUnicodes() {
                 if !unicodes.isEmpty {
                     let character = String(utf16CodeUnits: unicodes, count: unicodes.count)
-                    print(i)
                     data.insert(contentsOf: character.utf8, at: i)
                     unicodes.removeAll(keepingCapacity: true)
                 }
