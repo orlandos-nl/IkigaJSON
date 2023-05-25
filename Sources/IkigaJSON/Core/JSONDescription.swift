@@ -633,7 +633,7 @@ extension JSONDescription {
             let bounds = dataBounds(atIndexOffset: offset)
             let escaping = self.type(atOffset: offset) == .stringWithEscaping
             
-            if var stringData = bounds.makeStringData(from: buffer, escaping: escaping, unicode: unicode) {
+            if var stringData = try? bounds.makeStringData(from: buffer, escaping: escaping, unicode: unicode) {
                 if convertingSnakeCasing {
                     convertSnakeCasing(for: &stringData)
                 }

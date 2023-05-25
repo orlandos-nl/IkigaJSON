@@ -24,7 +24,7 @@ internal struct Bounds {
     ///
     /// - see: `makeStringFromData` for more information
     func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
-        if let data = makeStringData(from: pointer, escaping: escaping, unicode: unicode) {
+        if let data = try? makeStringData(from: pointer, escaping: escaping, unicode: unicode) {
             return String(data: data, encoding: .utf8)
         }
         
@@ -36,25 +36,34 @@ internal struct Bounds {
     ///
     /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
     /// towards unescaping.
-    func makeStringData(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> Data? {
+    func makeStringData(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) throws -> Data? {
         var data = Data(bytes: pointer + Int(offset), count: Int(length))
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
         if escaping || unicode {
             var length = Int(self.length)
             var i = 0
+            var unicodes = [UInt16]()
+
+            func flushUnicodes() {
+                if !unicodes.isEmpty {
+                    let character = String(utf16CodeUnits: unicodes, count: unicodes.count)
+                    print(i)
+                    data.insert(contentsOf: character.utf8, at: i)
+                    unicodes.removeAll(keepingCapacity: true)
+                }
+            }
             
             next: while i < length {
-                defer {
-                    i = i &+ 1
-                }
-                
                 let byte = data[i]
                 
                 unescape: if escaping {
                     // If this character is not a baskslash or this was the last character
                     // We don't need to unescape the next character
                     if byte != .backslash || i &+ 1 >= length {
+                        // Flush unprocessed unicodes and move past this character
+                        flushUnicodes()
+                        i = i &+ 1
                         break unescape
                     }
                     
@@ -64,32 +73,59 @@ internal struct Bounds {
                     
                     switch data[i] {
                     case .backslash, .solidus, .quote:
-                        continue next // just removal needed
+                        // just removal needed
+                        flushUnicodes()
+
+                        // Move past this character
+                        i = i &+ 1
+
+                        continue next
                     case .u:
                         // `\u` indicates a unicode character
                         data.remove(at: i)
                         length = length &- 1
-                        decodeUnicode(from: &data, offset: i, length: &length)
+                        let unicode = try decodeUnicode(from: &data, offset: &i, length: &length)
+                        unicodes.append(unicode)
+
+                        // Continue explicitly, so that we do not trigger the unicode 'flush' flow
+                        continue next
                     case .t:
                         data[i] = .tab
+                        // Move past this character
+                        i = i &+ 1
                     case .r:
                         data[i] = .carriageReturn
+                        // Move past this character
+                        i = i &+ 1
                     case .n:
                         data[i] = .newLine
+                        // Move past this character
+                        i = i &+ 1
                     case .f: // form feed, will just be passed on
                         return nil
                     case .b: // backspace, will just be passed on
                         return nil
                     default:
-                        // Try unicode decoding
-                        break unescape
+                        throw JSONParserError.unexpectedEscapingToken
                     }
-                    
+
+                    // 'flush' the accumulated `unicodes` to the buffer
+                    flushUnicodes()
+
                     continue next
+                } else {
+                    // End of unicodes, flush them
+                    flushUnicodes()
+
+                    // Move past this character
+                    i = i &+ 1
                 }
             }
+
+            // End of string, flush unicode
+            flushUnicodes()
         }
-        
+
         return data
     }
     
@@ -122,21 +158,29 @@ internal struct Bounds {
     }
 }
 
-// FIXME: Test, probably broken still
-fileprivate func decodeUnicode(from data: inout Data, offset: Int, length: inout Int) {
-    var offset = offset
-    
-    return data.withUnsafeMutableBytes { buffer in
-        let bytes = buffer.bindMemory(to: UInt8.self).baseAddress!.advanced(by: offset)
-        
-        while offset < length {
-            guard let base = bytes[offset].decodeHex(), let secondHex = bytes[offset &+ 1].decodeHex() else {
-                return
-            }
-            
-            bytes.pointee = (base << 4) &+ secondHex
-            length = length &- 1
-            offset = offset &+ 2
-        }
+struct UTF8ParsingError: Error {}
+
+fileprivate func decodeUnicode(from data: inout Data, offset: inout Int, length: inout Int) throws -> UInt16 {
+    let hexCharacters = 4
+    guard length - offset >= hexCharacters else {
+        throw UTF8ParsingError()
     }
+
+    guard
+        let hex0 = data.remove(at: offset).decodeHex(),
+        let hex1 = data.remove(at: offset).decodeHex(),
+        let hex2 = data.remove(at: offset).decodeHex(),
+        let hex3 = data.remove(at: offset).decodeHex()
+    else {
+        throw UTF8ParsingError()
+    }
+
+    length -= hexCharacters
+    var unicode: UInt16 = 0
+    unicode += UInt16(hex0) << 12
+    unicode += UInt16(hex1) << 8
+    unicode += UInt16(hex2) << 4
+    unicode += UInt16(hex3)
+
+    return unicode
 }
