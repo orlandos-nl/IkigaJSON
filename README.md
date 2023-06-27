@@ -75,7 +75,7 @@ extension IkigaJSONDecoder: ContentDecoder {
         decoder.settings.userInfo = userInfo
         return try decoder.decode(D.self, from: body)
     }
-}}
+}
 ```
 
 Register the encoder/decoder to Vapor like so:
