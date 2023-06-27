@@ -50,6 +50,15 @@ final class IkigaJSONTests: XCTestCase {
             XCTAssertEqual(result, ["simple": "ßhello world", "complex": "👩‍👩‍👧‍👧hello world"])
         }
     }
+
+    func testEscapedUnicodeWeis() throws {
+        do {
+            let json: Data = #"{"foo":"\u0022wei\u00DF\u0022"}"#.data(using: .utf8)!
+
+            let result = try IkigaJSONDecoder().decode([String: String].self, from: json)
+            XCTAssertEqual(result, ["foo": #""weiß""#])
+        }
+    }
     
     func testPropertyWrapper() throws {
         @propertyWrapper struct FluentPropertyTest<Value: Codable & Equatable>: Codable, Equatable {

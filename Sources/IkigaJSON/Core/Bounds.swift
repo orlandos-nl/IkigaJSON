@@ -41,7 +41,6 @@ internal struct Bounds {
         
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
         if escaping || unicode {
-            var length = Int(self.length)
             var i = 0
             var unicodes = [UInt16]()
 
@@ -53,7 +52,7 @@ internal struct Bounds {
                 }
             }
             
-            next: while i < length {
+            next: while i < data.count {
                 let byte = data[i]
                 
                 unescape: if escaping {
@@ -68,7 +67,6 @@ internal struct Bounds {
                     
                     // Remove the backslash and translate the next character
                     data.remove(at: i)
-                    length = length &- 1
                     
                     switch data[i] {
                     case .backslash, .solidus, .quote:
@@ -82,8 +80,7 @@ internal struct Bounds {
                     case .u:
                         // `\u` indicates a unicode character
                         data.remove(at: i)
-                        length = length &- 1
-                        let unicode = try decodeUnicode(from: &data, offset: &i, length: &length)
+                        let unicode = try decodeUnicode(from: &data, offset: &i)
                         unicodes.append(unicode)
 
                         // Continue explicitly, so that we do not trigger the unicode 'flush' flow
@@ -159,9 +156,9 @@ internal struct Bounds {
 
 struct UTF8ParsingError: Error {}
 
-fileprivate func decodeUnicode(from data: inout Data, offset: inout Int, length: inout Int) throws -> UInt16 {
+fileprivate func decodeUnicode(from data: inout Data, offset: inout Int) throws -> UInt16 {
     let hexCharacters = 4
-    guard length - offset >= hexCharacters else {
+    guard data.count - offset >= hexCharacters else {
         throw UTF8ParsingError()
     }
 
@@ -174,7 +171,6 @@ fileprivate func decodeUnicode(from data: inout Data, offset: inout Int, length:
         throw UTF8ParsingError()
     }
 
-    length -= hexCharacters
     var unicode: UInt16 = 0
     unicode += UInt16(hex0) << 12
     unicode += UInt16(hex1) << 8
