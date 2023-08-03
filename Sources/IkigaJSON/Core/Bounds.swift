@@ -97,10 +97,14 @@ internal struct Bounds {
                         data[i] = .newLine
                         // Move past this character
                         i = i &+ 1
-                    case .f: // form feed, will just be passed on
-                        return nil
-                    case .b: // backspace, will just be passed on
-                        return nil
+                    case .f:
+                        data[i] = .formFeed
+                        // Move past this character
+                        i = i &+ 1
+                    case .b:
+                        data[i] = .backspace
+                        // Move past this character
+                        i = i &+ 1
                     default:
                         throw JSONParserError.unexpectedEscapingToken
                     }

@@ -270,6 +270,14 @@ extension String {
                 escaped = true
                 characters[i] = .backslash
                 characters.insert(.t, at: i &+ 1)
+            case .backspace:
+                escaped = true
+                characters[i] = .backslash
+                characters.insert(.b, at: i &+ 1)
+            case .formFeed:
+                escaped = true
+                characters[i] = .backslash
+                characters.insert(.f, at: i &+ 1)
             case .backslash:
                 escaped = true
                 characters.insert(.backslash, at: i &+ 1)

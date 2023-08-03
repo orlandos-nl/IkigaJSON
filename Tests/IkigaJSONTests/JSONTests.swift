@@ -219,6 +219,44 @@ final class IkigaJSONTests: XCTestCase {
         let test = try Foundation.JSONDecoder().decode(Test.self, from: object.data)
         XCTAssertEqual(test.yes, "b")
     }
+
+    func testFormFeedParsing() throws  {
+        let string = #"""
+        {
+            "hi": "\f"
+        }
+        """#.data(using: .utf8)!
+        
+        let object = try JSONObject(data: string)
+        XCTAssertEqual(object["hi"].string, "\u{c}")
+    }
+
+    func testFormFeedEncoding() throws {
+        let object: JSONObject = [
+            "hi": "\u{c}"
+        ]
+        
+        XCTAssertEqual(object.string, #"{"hi":"\f"}"#)
+    }
+
+    func testBackspaceParsing() throws  {
+        let string = #"""
+        {
+            "hi": "\b"
+        }
+        """#.data(using: .utf8)!
+        
+        let object = try JSONObject(data: string)
+        XCTAssertEqual(object["hi"].string, "\u{8}")
+    }
+
+    func testBackspaceEncoding() throws {
+        let object: JSONObject = [
+            "hi": "\u{8}"
+        ]
+        
+        XCTAssertEqual(object.string, #"{"hi":"\b"}"#)
+    }
     
     func testBackslashWorks() throws {
         let string = #"""
