@@ -12,8 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - swift:5.4-focal
-          - swift:5.5-focal
+          - swift:5.7-focal
+          - swift:5.8-focal
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     steps:
