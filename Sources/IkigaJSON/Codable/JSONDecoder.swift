@@ -1,6 +1,11 @@
 import Foundation
 import NIO
 
+enum JSONDecoderError: Error {
+    case invalidURL(String)
+    case invalidDecimal(String)
+}
+
 @available(OSX 10.12, iOS 10, *)
 let isoFormatter = ISO8601DateFormatter()
 let isoDateFormatter: DateFormatter = {
@@ -281,6 +286,17 @@ fileprivate struct _JSONDecoder: Decoder {
             @unknown default:
                 throw JSONParserError.unknownJSONStrategy
             }
+        case is URL.Type:
+            let string = try singleValueContainer().decode(String.self)
+            
+            guard let url = URL(string: string) else {
+                throw JSONDecoderError.invalidURL(string)
+            }
+            
+            return url as! D
+        case is Decimal.Type:
+            let double = try singleValueContainer().decode(Double.self)
+            return Decimal(floatLiteral: double) as! D
         default:
             break
         }
