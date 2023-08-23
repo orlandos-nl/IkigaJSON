@@ -35,6 +35,32 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertNoThrow(try IkigaJSONDecoder().decode([UInt64].self, from: json))
     }
 
+    func testURL() throws {
+        struct Info: Codable, Equatable {
+            let website: URL
+        }
+
+        let domain = "https://unbeatable.software"
+        let info = Info(website: URL(string: domain)!)
+        let jsonObject = try IkigaJSONEncoder().encodeJSONObject(from: info)
+        XCTAssertEqual(jsonObject["website"].string, domain)
+        let info2 = try IkigaJSONDecoder().decode(Info.self, from: jsonObject.data)
+        XCTAssertEqual(info, info2)
+    }
+
+    func testDecimal() throws {
+        struct Info: Codable, Equatable {
+            let secretNumber: Decimal
+        }
+
+        let secretNumber: Decimal = 3.1414
+        let info = Info(secretNumber: secretNumber)
+        let jsonObject = try IkigaJSONEncoder().encodeJSONObject(from: info)
+        XCTAssertEqualWithAccuracy(jsonObject["secretNumber"].double!, 3.1414, accuracy: 0.001)
+        let info2 = try IkigaJSONDecoder().decode(Info.self, from: jsonObject.data)
+        XCTAssertEqual(info, info2)
+    }
+
     func testEscapedUnicode() throws {
         do {
             let json: Data = #"{"simple":"\u00DF", "complex": "\ud83d\udc69\u200d\ud83d\udc69"}"#.data(using: .utf8)!
