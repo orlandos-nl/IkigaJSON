@@ -23,7 +23,7 @@ The 1.x versions are reliant on SwiftNIO 1.x, and for SwiftNIO 2.x support use t
 .package(url: "https://github.com/orlandos-nl/IkigaJSON.git", from: "2.0.0"),
 ```
 
-### Usage
+### Codable Usage
 
 ```swift
 import IkigaJSON
@@ -90,9 +90,9 @@ encoder.settings.dateEncodingStrategy = .iso8601
 ContentConfiguration.global.use(encoder: encoder, for: .json)
 ```
 
-### Raw JSON
+### Random Access JSON
 
-IkigaJSON supports raw JSON types (JSONObject and JSONArray) like many other libraries do, alongside the codable API described above. The critical difference is that IkigaJSON edits the JSON inline, so there's no additional conversion overhead from Swift type to JSON.
+IkigaJSON supports raw JSON types (JSONObject and JSONArray) like many other libraries do, alongside the codable API described above. The critical difference is that IkigaJSON edits the JSON inline, so there's no additional conversion overhead from Swift type to a JSON string/blob.
 
 ```swift
 var user = JSONObject()
@@ -106,6 +106,8 @@ print(user["username"].string)
 // OR
 print(user["username"] as? String)
 ```
+
+
 
 ### SwiftNIO support
 

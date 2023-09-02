@@ -99,6 +99,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
         }
     }
     
+    /// The amount of elements in this array
     public var count: Int {
         return description.arrayObjectCount()
     }
@@ -108,6 +109,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
         self.description = description
     }
     
+    /// Appends a new value to this JSONArray
     public mutating func append(_ value: JSONValue) {
         let oldSize = jsonBuffer.writerIndex
         // Before `]`
@@ -223,6 +225,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
         }
     }
 
+    /// Accesses the element at the specified position.
     public subscript(index: Int) -> JSONValue {
         get {
             return jsonBuffer.withBytePointer { pointer in
