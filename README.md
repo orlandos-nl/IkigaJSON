@@ -38,6 +38,35 @@ var decoder = IkigaJSONDecoder()
 let user = try decoder.decode(User.self, from: data)
 ```
 
+### In Hummingbird 2
+
+Conform Ikiga to Hummingbird's protocols like so:
+
+```swift
+extension IkigaJSONEncoder: HBResponseEncoder {
+    public func encode(_ value: some Encodable, from request: HBRequest, context: some HBBaseRequestContext) throws -> HBResponse {
+        // Capacity should roughly cover the amount of data you regularly expect to encode
+        // However, the buffer will grow if needed
+        var buffer = context.allocator.buffer(capacity: 2048)
+        try self.encodeAndWrite(value, into: &buffer)
+        return HBResponse(
+            status: .ok, 
+            headers: [
+                .contentType: "application/json; charset=utf-8",
+            ], 
+            body: .init(byteBuffer: buffer)
+        )
+    }
+}
+
+extension IkigaJSONDecoder: HBRequestDecoder {
+    public func decode<T>(_ type: T.Type, from request: HBRequest, context: some HBBaseRequestContext) async throws -> T where T : Decodable {
+        let data = try await request.body.collate(maxSize: context.maxUploadSize)
+        return try self.decode(T.self, from: data)
+    }
+}
+```
+
 ### In Vapor 4
 
 Conform Ikiga to Vapor 4's protocols like so:
