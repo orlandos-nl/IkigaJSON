@@ -1,4 +1,5 @@
 import Foundation
+import NIOConcurrencyHelpers
 import NIO
 
 enum JSONDecoderError: Error {
@@ -34,7 +35,7 @@ func date(from string: String) throws -> Date {
 internal enum SuperCodingKey: String, CodingKey { case `super` }
 
 /// These settings can be used to alter the decoding process.
-public struct JSONDecoderSettings {
+public struct JSONDecoderSettings: @unchecked Sendable {
     public init() {}
     
     /// This userInfo is accessible by the Decodable types that are being created
@@ -71,12 +72,17 @@ public struct JSONDecoderSettings {
 }
 
 /// A JSON Decoder that aims to be largely functionally equivalent to Foundation.JSONDecoder with more for optimization.
-public final class IkigaJSONDecoder {
+public final class IkigaJSONDecoder: Sendable {
+    private let settingsBox: NIOLockedValueBox<JSONDecoderSettings>
+    
     /// These settings can be used to alter the decoding process.
-    public var settings: JSONDecoderSettings
+    public var settings: JSONDecoderSettings {
+        get { settingsBox.withLockedValue { $0 } }
+        set { settingsBox.withLockedValue { $0 = newValue } }
+    }
     
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
-        self.settings = settings
+        self.settingsBox = .init(settings)
     }
     
     /// Parses the Decodable type from an UnsafeBufferPointer.

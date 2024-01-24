@@ -56,7 +56,7 @@ final class IkigaJSONTests: XCTestCase {
         let secretNumber: Decimal = 3.1414
         let info = Info(secretNumber: secretNumber)
         let jsonObject = try IkigaJSONEncoder().encodeJSONObject(from: info)
-        XCTAssertEqualWithAccuracy(jsonObject["secretNumber"].double!, 3.1414, accuracy: 0.001)
+        XCTAssertEqual(jsonObject["secretNumber"].double!, 3.1414, accuracy: 0.001)
         let info2 = try IkigaJSONDecoder().decode(Info.self, from: jsonObject.data)
         XCTAssertEqual(info, info2)
     }

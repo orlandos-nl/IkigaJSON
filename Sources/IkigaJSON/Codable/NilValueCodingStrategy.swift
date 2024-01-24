@@ -2,7 +2,7 @@
 /// encoded values that are `nil`. Note that calling any variant of `encode()`
 /// with an `Optional` type is always equivalent to calling `encodeNil()` if the
 /// value is `nil`.
-public enum NilValueEncodingStrategy: Equatable {
+public enum NilValueEncodingStrategy: Equatable, Sendable {
     /// Follow `Encodable`'s default behavior:
     ///
     ///   - `encodeIfPresent()`: Skip encoding for `nil` inputs.
@@ -31,7 +31,7 @@ public enum NilValueEncodingStrategy: Equatable {
 
 /// Defines the possible strategies for determining whether to treat a missing key
 /// or value requested as an optional type as `nil` when decoding.
-public enum NilValueDecodingStrategy: Equatable {
+public enum NilValueDecodingStrategy: Equatable, Sendable {
     /// Follow `Decodable`'s default behavior:
     ///
     ///   - `decodeNil(forKey:)`: Throw `.keyNotFound` when the key is missing.
