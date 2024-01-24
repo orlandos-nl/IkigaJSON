@@ -3,7 +3,7 @@ import NIO
 
 
 /// These settings influence the encoding process.
-public struct JSONEncoderSettings {
+public struct JSONEncoderSettings: @unchecked Sendable {
     public init() {}
     
     /// The manner of expanding internal buffers for growing encoding demands
@@ -75,7 +75,7 @@ public struct JSONEncoderSettings {
 }
 
 /// The manner of expanding internal buffers for growing encoding demands
-public enum ExpansionMode {
+public enum ExpansionMode: Sendable {
     /// For limited RAM environments
     case smallest
     
@@ -113,7 +113,7 @@ final class SharedEncoderData {
     /// Any data after the userCapacity is lost
     func expand(to count: Int, usedCapacity size: Int) {
         let new = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-        new.assign(from: pointer, count: size)
+        new.update(from: pointer, count: size)
         pointer.deallocate()
         totalSize = count
         self.pointer = new
@@ -203,7 +203,7 @@ final class SharedEncoderData {
 
 
 /// A JSON Encoder that aims to be largely functionally equivalent to Foundation.JSONEncoder.
-public struct IkigaJSONEncoder {
+public struct IkigaJSONEncoder: @unchecked Sendable {
     public var userInfo = [CodingUserInfoKey : Any]()
     
     /// These settings influence the encoding process.
