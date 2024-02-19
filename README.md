@@ -8,6 +8,8 @@ Aside from being more performant, IkigaJSON has a much lower and more stable mem
 
 [Read the Docs](https://orlandos.nl/docs/ikigajson)
 
+Please note that Swift libraries need to be built in RELEASE compilation mode in order to judge performnce. If you're testing performance on a DEBUG build, you'll find severe mis-optimisations by the compiler that cannot reasonably be fixed in libraries.
+
 ### Server-Side Swift
 
 The above performance statement was tested on Foundation for macOS and iOS. If you're using Swift on Linux with Swift 5.5, your performance is slightly better if you use the new Foundation for Linux. Swift 5.5 does not improve Foundation's JSON performance on macOS or iOS. IkigaJSON performs increasingly better than Linux’ Foundation JSON the bigger your JSON payload gets.
