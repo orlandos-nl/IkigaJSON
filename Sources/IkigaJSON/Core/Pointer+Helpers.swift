@@ -102,4 +102,9 @@ internal extension UInt8 {
     static let squareRight: UInt8 = 0x5d
     static let curlyLeft: UInt8 = 0x7b
     static let curlyRight: UInt8 = 0x7d
+
+    @usableFromInline
+    var isDigit: Bool {
+        self >= .zero && self <= .nine
+    }
 }

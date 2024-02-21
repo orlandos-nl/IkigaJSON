@@ -217,7 +217,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
         case .integer:
             return description.dataBounds(atIndexOffset: offset).makeInt(from: json)!
         case .floatingNumber:
-            return description.dataBounds(atIndexOffset: offset).makeDouble(from: json, floating: true)!
+            return description.dataBounds(atIndexOffset: offset).makeDouble(from: json, floating: true)
         case .null:
             return NSNull()
         }
