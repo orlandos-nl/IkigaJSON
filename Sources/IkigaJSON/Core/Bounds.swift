@@ -226,34 +226,55 @@ fileprivate func strtod(_ pointer: UnsafePointer<UInt8>, length: Int) -> Double 
 
     result = Double(base)
 
-    guard notAtEnd, pointer.pointee == .fullStop else {
+    guard notAtEnd else {
         return result * sign
     }
 
-    pointer += 1
-
-    var fraction = 0
-    var divisor = 1
-
-    while notAtEnd, pointer.pointee.isDigit {
-        fraction &*= 10
-        fraction &+= numericCast(pointer.pointee &- .zero)
-        divisor &*= 10
+    if pointer.pointee == .fullStop {
         pointer += 1
+
+        var fraction = 0
+        var divisor = 1
+
+        while notAtEnd, pointer.pointee.isDigit {
+            fraction &*= 10
+            fraction &+= numericCast(pointer.pointee &- .zero)
+            divisor &*= 10
+            pointer += 1
+        }
+
+        result += Double(fraction) / Double(divisor)
+
+        guard notAtEnd else {
+            return result * sign
+        }
     }
 
-    result += Double(fraction) / Double(divisor)
-
-    guard notAtEnd, pointer.pointee == .e || pointer.pointee == .E else {
+    guard pointer.pointee == .e || pointer.pointee == .E else {
         return result * sign
     }
 
     pointer += 1
     var exponent = 0
+    var exponentSign = 1
+
+    switch pointer.pointee {
+    case .minus:
+        exponentSign = -1
+        pointer += 1
+    case .plus:
+        exponentSign = 1
+        pointer += 1
+    default:
+        ()
+    }
+
     while notAtEnd, pointer.pointee.isDigit {
         exponent &*= 10
         exponent &+= numericCast(pointer.pointee &- .zero)
+        pointer += 1
     }
+    exponent *= exponentSign
     result *= pow(10, Double(exponent))
 
     return result * sign
