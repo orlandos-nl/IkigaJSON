@@ -137,18 +137,18 @@ internal struct Bounds {
     /// Uses the fast path for doubles if possible, when failing falls back to Foundation.
     ///
     /// https://www.exploringbinary.com/fast-path-decimal-to-floating-point-conversion/
-    internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double? {
+    internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double {
         let offset = Int(self.offset)
         let length = Int(self.length)
-        /// Falls back to the foundation implementation which makes too many copies for this use case
-        ///
-        /// Used when the implementation is unsure
-        let slice = UnsafeBufferPointer(start: pointer + offset, count: length)
-        if let string = String(bytes: slice, encoding: .utf8) {
-            return Double(string)
+
+        if floating {
+            /// Falls back to the foundation implementation which makes too many copies for this use case
+            ///
+            /// Used when the implementation is unsure
+            return strtod(pointer + offset, length: length)
+        } else {
+            return strtoi(pointer + offset, length: length)
         }
-        
-        return nil
     }
     
     internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
@@ -176,10 +176,106 @@ fileprivate func decodeUnicode(from data: inout Data, offset: inout Int) throws 
     }
 
     var unicode: UInt16 = 0
-    unicode += UInt16(hex0) << 12
-    unicode += UInt16(hex1) << 8
-    unicode += UInt16(hex2) << 4
-    unicode += UInt16(hex3)
+    unicode &+= UInt16(hex0) &<< 12
+    unicode &+= UInt16(hex1) &<< 8
+    unicode &+= UInt16(hex2) &<< 4
+    unicode &+= UInt16(hex3)
 
     return unicode
+}
+
+fileprivate func strtoi(_ pointer: UnsafePointer<UInt8>, length: Int) -> Double {
+    var pointer = pointer
+    let endPointer = pointer + length
+    var notAtEnd: Bool { pointer != endPointer }
+
+    var result = 0
+    while notAtEnd, pointer.pointee.isDigit {
+        result &*= 10
+        result &+= numericCast(pointer.pointee &- .zero)
+        pointer += 1
+    }
+    return Double(result)
+}
+
+fileprivate func strtod(_ pointer: UnsafePointer<UInt8>, length: Int) -> Double {
+    var pointer = pointer
+    let endPointer = pointer + length
+    var notAtEnd: Bool { pointer != endPointer }
+
+    var result: Double
+    var base = 0
+    var sign: Double = 1
+
+    switch pointer.pointee {
+    case .minus:
+        sign = -1
+        pointer += 1
+    case .plus:
+        sign = 1
+        pointer += 1
+    default:
+        ()
+    }
+
+    while notAtEnd, pointer.pointee.isDigit {
+        base &*= 10
+        base &+= numericCast(pointer.pointee &- .zero)
+        pointer += 1
+    }
+
+    result = Double(base)
+
+    guard notAtEnd else {
+        return result * sign
+    }
+
+    if pointer.pointee == .fullStop {
+        pointer += 1
+
+        var fraction = 0
+        var divisor = 1
+
+        while notAtEnd, pointer.pointee.isDigit {
+            fraction &*= 10
+            fraction &+= numericCast(pointer.pointee &- .zero)
+            divisor &*= 10
+            pointer += 1
+        }
+
+        result += Double(fraction) / Double(divisor)
+
+        guard notAtEnd else {
+            return result * sign
+        }
+    }
+
+    guard pointer.pointee == .e || pointer.pointee == .E else {
+        return result * sign
+    }
+
+    pointer += 1
+    var exponent = 0
+    var exponentSign = 1
+
+    switch pointer.pointee {
+    case .minus:
+        exponentSign = -1
+        pointer += 1
+    case .plus:
+        exponentSign = 1
+        pointer += 1
+    default:
+        ()
+    }
+
+    while notAtEnd, pointer.pointee.isDigit {
+        exponent &*= 10
+        exponent &+= numericCast(pointer.pointee &- .zero)
+        pointer += 1
+    }
+    exponent *= exponentSign
+    result *= pow(10, Double(exponent))
+
+    return result * sign
 }
