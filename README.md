@@ -1,14 +1,12 @@
-# IkigaJSON
+<a href="https://unbeatable.software"><img src="./assets/IkigaJSON.png" /></a>
 
-IkigaJSON is a really fast JSON parser. It performed ~4x faster than macOS/iOS Foundation in our tests when decoding a type from JSON.
+IkigaJSON is a really fast JSON parser. IkigaJSON is competitive to the modern Foundation JSON in benchmarks, and outperforms older versions of Foundation JSON by a large margin.
 
-Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too! By design, IkigaJSON scales better on larger JSON payloads than most other JSON implementations. All while providing an easy to use API with Codable support.
+Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too! By design, IkigaJSON scales better than Foundation on larger JSON payloads. All while providing an easy to use API with Codable support.
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
-[Read the Docs](https://orlandos.nl/docs/ikigajson)
-
-Please note that Swift libraries need to be built in RELEASE compilation mode in order to judge performnce. If you're testing performance on a DEBUG build, you'll find severe mis-optimisations by the compiler that cannot reasonably be fixed in libraries.
+Please note that Swift libraries need to be built in RELEASE compilation mode in order to judge performnce. If you're testing performance on a DEBUG build, you'll find severe mis-optimisations by the compiler that cannot reasonably be fixed in libraries. When building Swift code on DEBUG compilation, it can be 10-20x slower than equivalent code on RELEASE.
 
 ### Server-Side Swift
 
