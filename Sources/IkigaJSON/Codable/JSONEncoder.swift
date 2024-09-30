@@ -386,12 +386,14 @@ fileprivate final class _JSONEncoder: Encoder {
                 
                 key.map { writeKey($0) }
                 writeValue(string)
+            #if !canImport(FoundationEssentials) || swift(<5.10)
             case .formatted(let formatter):
                 let string = formatter.string(from: date)
                 if let key = key {
                     writeKey(key)
                 }
                 writeValue(string)
+            #endif
             case .custom(let custom):
                 let offsetBeforeKey = offset, hadWrittenValue = didWriteValue
                 if let key = key {

@@ -262,6 +262,7 @@ fileprivate struct _JSONDecoder: Decoder {
                 let string = try singleValueContainer().decode(String.self)
                 
                 return try date(from: string) as! D
+            #if !canImport(FoundationEssentials) || swift(<5.10)
             case .formatted(let formatter):
                 let string = try singleValueContainer().decode(String.self)
                 
@@ -270,6 +271,7 @@ fileprivate struct _JSONDecoder: Decoder {
                 }
                 
                 return date as! D
+            #endif
             case .custom(let makeDate):
                 return try makeDate(self) as! D
             @unknown default:
