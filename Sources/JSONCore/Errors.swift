@@ -1,5 +1,5 @@
-public enum JSONParserError: Error, CustomStringConvertible {
-    public enum Reason: CustomStringConvertible {
+public enum JSONParserError: Error, CustomStringConvertible, Sendable {
+    public enum Reason: CustomStringConvertible, Sendable {
         case expectedObjectKey
         case expectedObjectClose
         case expectedTopLevelObject
@@ -134,7 +134,12 @@ public enum JSONParserError: Error, CustomStringConvertible {
     case unexpectedEscapingToken
 }
 
-internal struct TypeConversionError<F: FixedWidthInteger>: Error {
+package struct TypeConversionError<F: FixedWidthInteger & Sendable>: Error {
     let from: F
     let to: Any.Type
+
+    package init(from: F, to: Any.Type) {
+        self.from = from
+        self.to = to
+    }
 }

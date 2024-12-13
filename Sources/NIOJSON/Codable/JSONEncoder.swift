@@ -1,6 +1,6 @@
 import Foundation
-import NIO
-
+import NIOCore
+import JSONCore
 
 /// These settings influence the encoding process.
 public struct JSONEncoderSettings: @unchecked Sendable {

@@ -1,22 +1,22 @@
 /// All parsing logic of the JSON parser
 
-extension JSONParser {
+extension JSONTokenizer {
     /// Scans a JSON object and parses values within it
-    internal mutating func scanArray() throws {
+    internal mutating func scanArray() throws(JSONParserError) {
         assert(pointer.pointee == .squareLeft, "An array was scanned but the first byte was not `[`")
         
         // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
         
         // Start describing the array, this is not complete yet, merely a placeholder
-        let array = description.describeArray(atJSONOffset: Int32(currentOffset))
-        let startOffset = currentOffset
-        
+        let arrayStart = JSONSourcePosition(byteIndex: currentOffset)
+        let context = destination.arrayStartFound(.init(start: arrayStart))
+
         // Skip past the array open `[`
         advance(1)
         
-        var arrayCount: Int32 = 0
-        
+        var memberCount = 0
+
         repeat {
             // Whitespace before the comma
             try skipWhitespace()
@@ -27,8 +27,12 @@ extension JSONParser {
                 advance(1)
                 
                 // Complete the array description
-                let result = _ArrayObjectDescription(valueCount: arrayCount, jsonByteCount: Int32(currentOffset &- startOffset))
-                return description.complete(array, withResult: result)
+                let arrayEnd = JSONToken.ArrayEnd(
+                    start: arrayStart,
+                    end: JSONSourcePosition(byteIndex: currentOffset),
+                    memberCount: memberCount
+                )
+                return destination.arrayEndFound(arrayEnd, context: context)
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON
                 // Commas are required between each element
@@ -43,28 +47,28 @@ extension JSONParser {
             try skipWhitespace()
             
             try scanValue()
-            arrayCount = arrayCount &+ 1
+            memberCount &+= 1
         } while hasMoreData
         
         throw JSONParserError.missingData(line: line, column: column)
     }
     
     /// Scans a JSON object and parses keys and values within it
-    internal mutating func scanObject() throws {
+    internal mutating func scanObject() throws(JSONParserError) {
         assert(pointer.pointee == .curlyLeft, "An object was scanned but the first byte was not `{`")
         
         // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
         
         // Start describing the object, this is not complete yet, merely a placeholder
-        let object = description.describeObject(atJSONOffset: Int32(currentOffset))
-        let startOffset = currentOffset
-        
+        let start = JSONSourcePosition(byteIndex: currentOffset)
+        let context = destination.objectStartFound(JSONToken.ObjectStart(start: start))
+
         // Skip past the object open `{`
         advance(1)
         
-        var pairCount: Int32 = 0
-        
+        var memberCount = 0
+
         repeat {
             try skipWhitespace()
             
@@ -73,8 +77,13 @@ extension JSONParser {
                 advance(1)
                 
                 // Complete the object description
-                let result = _ArrayObjectDescription(valueCount: pairCount, jsonByteCount: Int32(currentOffset &- startOffset))
-                return description.complete(object, withResult: result)
+                let end = JSONSourcePosition(byteIndex: currentOffset)
+                let objectEnd = JSONToken.ObjectEnd(
+                    start: start,
+                    end: end,
+                    memberCount: memberCount
+                )
+                return destination.objectEndFound(objectEnd, context: context)
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON because a value was already parsed
                 // Commas are required between each element
@@ -96,14 +105,14 @@ extension JSONParser {
             try skipWhitespace()
             try scanValue()
             
-            pairCount = pairCount &+ 1
+            memberCount &+= 1
         } while hasMoreData
         
         throw JSONParserError.missingData(line: line, column: column)
     }
     
-    /// Scans _any_ value and writes it to the description
-    internal mutating func scanValue() throws {
+    /// Scans _any_ value and calls into the destination
+    public mutating func scanValue() throws(JSONParserError) {
         guard hasMoreData else {
             throw JSONParserError.missingData(line: line, column: column)
         }
@@ -127,7 +136,7 @@ extension JSONParser {
             }
             
             advance(5)
-            description.describeFalse(atJSONOffset: Int32(currentOffset))
+            destination.booleanFalseFound(.init(start: .init(byteIndex: currentOffset)))
         case .t: // true
             guard count > 4 else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
@@ -138,7 +147,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeTrue(atJSONOffset: Int32(currentOffset))
+            destination.booleanTrueFound(.init(start: .init(byteIndex: currentOffset)))
         case .n: // null
             guard count > 4 else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
@@ -149,7 +158,7 @@ extension JSONParser {
             }
             
             advance(4)
-            description.describeNull(atJSONOffset: Int32(currentOffset))
+            destination.nullFound(.init(start: .init(byteIndex: currentOffset)))
         case .zero ... .nine, .minus:// Numerical
             try scanNumber()
         default:
@@ -164,12 +173,10 @@ extension JSONParser {
         return byte
     }
     
-    /// Scans a number literal, be it double or integer, and writes it to the description
+    /// Scans a number literal, be it double or integer, and calls into the destination
     ///
-    /// Integers are simpler to parse, so a difference is made in the binary description
-    ///
-    /// We don't copy the number out here, this saves performance in many areas
-    fileprivate mutating func scanNumber() throws {
+    /// Integers are simpler to parse, so a different parsing strategy may be sed for performance
+    fileprivate mutating func scanNumber() throws(JSONParserError) {
         var byteLength = 1
         var floating = false
         
@@ -194,16 +201,16 @@ extension JSONParser {
             throw JSONParserError.unexpectedToken(line: line, column: column, token: .minus, reason: .expectedValue)
         }
         
-        let start = currentOffset
+        let start = JSONSourcePosition(byteIndex: currentOffset)
         advance(byteLength)
-        let bounds = Bounds(offset: Int32(start), length: Int32(byteLength))
-        description.describeNumber(at: bounds, floatingPoint: floating)
+        let end = JSONSourcePosition(byteIndex: currentOffset)
+        destination.numberFound(JSONToken.Number(start: start, end: end, isInteger: !floating))
     }
     
-    /// Scans a String literal at the current offset and writes it to the description. Used for values as well as object keys
+    /// Scans a String literal at the current offset and calls into the destination. Used for values as well as object keys
     ///
     /// We don't copy the String out here, this saves performance in many areas
-    fileprivate mutating func scanStringLiteral() throws {
+    fileprivate mutating func scanStringLiteral() throws(JSONParserError) {
         if pointer.pointee != .quote {
             throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedObjectKey)
         }
@@ -214,11 +221,8 @@ extension JSONParser {
         // If any excaping character is detected, it will be noted
         // This reduces the performance cost on parsing most strings, removing a second unneccessary check
         var didEscape = false
-        
-        defer {
-            advance(currentIndex)
-        }
-        
+        defer { advance(currentIndex) }
+
         while currentIndex < count {
             defer { currentIndex = currentIndex &+ 1 }
             
@@ -248,8 +252,12 @@ extension JSONParser {
                 
                 if !escaped {
                     // Defer didn't trigger yet
-                    let bounds = Bounds(offset: Int32(currentOffset), length: Int32(currentIndex &+ 1))
-                    description.describeString(at: bounds, escaped: didEscape)
+                    let start = JSONSourcePosition(byteIndex: currentOffset)
+                    destination.stringFound(.init(
+                        start: start,
+                        byteLength: currentIndex &+ 1,
+                        usesEscaping: didEscape
+                    ))
                     return
                 }
             } else if byte == .backslash {

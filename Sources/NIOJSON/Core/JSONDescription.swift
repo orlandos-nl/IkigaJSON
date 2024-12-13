@@ -1,5 +1,6 @@
-import NIO
 import Foundation
+import NIOCore
+import JSONCore
 
 /// Stores data efficiently to describe JSON to be parsed lazily into a concrete type
 /// from the original buffer
@@ -11,9 +12,60 @@ import Foundation
 /// - Length is a Int32 with the length from the offset that this element takes, not for bool and null
 /// - ChildCount is a Int32 only for objects and arrays. This amount of successive elements are children Objects have 2 JSONElements per registered element. The first element must be a string for the key
 /// - ChildrenLength is a Int32 with the length of all child indexes
-internal struct JSONDescription {
+public struct JSONDescription: JSONTokenizerDestination {
+    public struct ArrayStartContext: Sendable {
+        fileprivate let indexOffset: Int
+        fileprivate let firstChildIndexOffset: Int
+    }
+    public struct ObjectStartContext: Sendable {
+        fileprivate let indexOffset: Int
+        fileprivate let firstChildIndexOffset: Int
+    }
+
+    public mutating func booleanTrueFound(_ boolean: JSONToken.BooleanTrue) {
+        describeTrue(atJSONOffset: Int32(boolean.start.byteOffset))
+    }
+
+    public mutating func booleanFalseFound(_ boolean: JSONToken.BooleanFalse) {
+        describeFalse(atJSONOffset: Int32(boolean.start.byteOffset))
+    }
+
+    public mutating func nullFound(_ null: JSONToken.Null) {
+        describeNull(atJSONOffset: Int32(null.start.byteOffset))
+    }
+
+    public mutating func stringFound(_ string: JSONToken.String) {
+        describeString(string)
+    }
+
+    public mutating func numberFound(_ number: JSONToken.Number) {
+        describeNumber(number)
+    }
+
+    public mutating func arrayStartFound(_ start: JSONToken.ArrayStart) -> ArrayStartContext {
+        describeArray(atJSONOffset: Int32(start.start.byteOffset))
+    }
+
+    public mutating func arrayEndFound(
+        _ end: JSONToken.ArrayEnd,
+        context: consuming ArrayStartContext
+    ) {
+        complete(context, withResult: end)
+    }
+
+    public mutating func objectStartFound(_ start: JSONToken.ObjectStart) -> ObjectStartContext {
+        describeObject(atJSONOffset: Int32(start.start.byteOffset))
+    }
+
+    public mutating func objectEndFound(
+        _ end: JSONToken.ObjectEnd,
+        context: consuming ObjectStartContext
+    ) {
+        complete(context, withResult: end)
+    }
+
     internal var buffer: ByteBuffer
-    
+
     func slice(from offset: Int, length: Int) -> JSONDescription {
         return JSONDescription(buffer: buffer.getSlice(at: offset, length: length)!)
     }
@@ -24,7 +76,7 @@ internal struct JSONDescription {
     
     /// Creates a new JSONDescription reserving 512 bytes by default.
     init(size: Int = 512) {
-        self.buffer = allocator.buffer(capacity: size)
+        self.buffer = ByteBufferAllocator().buffer(capacity: size)
     }
     
     /// Resets the used capacity which would enable reusing this description
@@ -166,7 +218,7 @@ extension JSONDescription {
         buffer.advance(at: Constants.arrayObjectTotalIndexLengthOffset, by: Int32(-removedIndexLength))
         buffer.advance(at: Constants.arrayObjectPairCountOffset, by: -1)
         buffer.advance(at: Constants.jsonLengthOffset, by: Int32(-removedJSONLength))
-        
+
         var updateLocationOffset = Constants.firstArrayObjectChildOffset
         
         // Move back offsets >= the removed offset
@@ -273,9 +325,15 @@ extension JSONDescription {
             buffer.setInteger(UInt8.quote, at: baseOffset)
             buffer.setBytes(characters, at: baseOffset + 1)
             buffer.setInteger(UInt8.quote, at: baseOffset + 1 + characters.count)
-            
-            let newBounds = Bounds(offset: jsonBounds.offset, length: length)
-            rewriteString(newBounds, escaped: escaped, atIndexOffset: indexOffset)
+
+            rewriteString(
+                JSONToken.String(
+                    start: JSONSourcePosition(byteIndex: baseOffset),
+                    byteLength: _length,
+                    usesEscaping: escaped
+                ),
+                atIndexOffset: indexOffset
+            )
         case let double as Double:
             let textualDouble = String(double)
             let _length = textualDouble.utf8.count
@@ -283,21 +341,35 @@ extension JSONDescription {
             let baseOffset = Int(jsonBounds.offset)
 
             buffer.prepareForRewrite(atOffset: baseOffset, oldSize: Int(jsonBounds.length), newSize: _length)
+            // TODO: Serialize without using String
             buffer.setString(textualDouble, at: baseOffset)
-            
-            let newBounds = Bounds(offset: jsonBounds.offset, length: length)
-            rewriteNumber(newBounds, floatingPoint: true, atIndexOffset: indexOffset)
+
+            rewriteNumber(
+                JSONToken.Number(
+                    start: JSONSourcePosition(byteIndex: baseOffset),
+                    byteLength: _length,
+                    isInteger: false
+                ),
+                atIndexOffset: indexOffset
+            )
         case let int as Int:
             let textualInt = String(int)
             let _length = textualInt.utf8.count
             length = Int32(_length)
             let baseOffset = Int(jsonBounds.offset)
-            
+
             buffer.prepareForRewrite(atOffset: baseOffset, oldSize: Int(jsonBounds.length), newSize: _length)
+            // TODO: Serialize without using String
             buffer.setString(textualInt, at: baseOffset)
             
-            let newBounds = Bounds(offset: jsonBounds.offset, length: length)
-            rewriteNumber(newBounds, floatingPoint: false, atIndexOffset: indexOffset)
+            rewriteNumber(
+                JSONToken.Number(
+                    start: JSONSourcePosition(byteIndex: baseOffset),
+                    byteLength: _length,
+                    isInteger: true
+                ),
+                atIndexOffset: indexOffset
+            )
         case let bool as Bool:
             if bool {
                 length = 4
@@ -345,22 +417,29 @@ extension JSONDescription {
         buffer.advance(at: Constants.jsonLengthOffset, by: size)
     }
 
-    mutating func rewriteStringOrNumber(_ value: Bounds, type: JSONType, atIndexOffset offset: Int) {
+    mutating func rewriteNumber(
+        _ number: JSONToken.Number,
+        atIndexOffset offset: Int
+    ) {
+        let type: JSONType = number.isInteger ? .integer : .floatingNumber
         let oldSize = indexLength(atOffset: offset)
-        
+
         buffer.prepareForRewrite(atOffset: offset, oldSize: oldSize, newSize: Constants.stringNumberIndexLength)
 
         buffer.setInteger(type.rawValue, at: offset)
-        buffer.setInteger(value.offset, at: offset + Constants.jsonLocationOffset)
-        buffer.setInteger(value.length, at: offset + Constants.jsonLengthOffset)
+        buffer.setInteger(Int32(number.start.byteOffset), at: offset + Constants.jsonLocationOffset)
+        buffer.setInteger(Int32(number.byteLength), at: offset + Constants.jsonLengthOffset)
     }
 
-    mutating func rewriteNumber(_ number: Bounds, floatingPoint: Bool, atIndexOffset offset: Int) {
-        rewriteStringOrNumber(number, type: floatingPoint ? .floatingNumber : .integer, atIndexOffset: offset)
-    }
+    mutating func rewriteString(_ string: JSONToken.String, atIndexOffset offset: Int) {
+        let type: JSONType = string.usesEscaping ? .stringWithEscaping : .string
+        let oldSize = indexLength(atOffset: offset)
 
-    mutating func rewriteString(_ string: Bounds, escaped: Bool, atIndexOffset offset: Int) {
-        rewriteStringOrNumber(string, type: escaped ? .stringWithEscaping : .string, atIndexOffset: offset)
+        buffer.prepareForRewrite(atOffset: offset, oldSize: oldSize, newSize: Constants.stringNumberIndexLength)
+
+        buffer.setInteger(type.rawValue, at: offset)
+        buffer.setInteger(Int32(string.start.byteOffset), at: offset + Constants.jsonLocationOffset)
+        buffer.setInteger(Int32(string.byteLength), at: offset + Constants.jsonLengthOffset)
     }
 
     private mutating func rewriteShortType(to type: JSONType, indexOffset: Int, jsonOffset: Int32) {
@@ -393,23 +472,24 @@ extension JSONDescription {
         buffer.setBuffer(newDescription.buffer, at: localOffset)
     }
     
-    mutating func describeString(at stringBounds: Bounds, escaped: Bool) {
-        let type: JSONType = escaped ? .stringWithEscaping : .string
-        
+    mutating func describeString(_ string: JSONToken.String) {
+        let type: JSONType = string.usesEscaping ? .stringWithEscaping : .string
+
+        // TODO: Host endianness is faster
         buffer.writeInteger(type.rawValue)
-        buffer.writeInteger(stringBounds.offset)
-        buffer.writeInteger(stringBounds.length)
+        buffer.writeInteger(Int32(string.start.byteOffset))
+        buffer.writeInteger(Int32(string.byteLength))
     }
     
-    mutating func describeNumber(at number: Bounds, floatingPoint: Bool) {
+    mutating func describeNumber(_ number: JSONToken.Number) {
         // Make a destinction between floating points and integers
-        let type = floatingPoint ? JSONType.floatingNumber.rawValue : JSONType.integer.rawValue
-        
+        let type = number.isInteger ? JSONType.integer.rawValue : JSONType.floatingNumber.rawValue
+
         // Set the new type identifier
         self.buffer.writeInteger(type)
         
-        self.buffer.writeInteger(number.offset)
-        self.buffer.writeInteger(number.length)
+        self.buffer.writeInteger(Int32(number.start.byteOffset))
+        self.buffer.writeInteger(Int32(number.byteLength))
     }
     
     mutating func describeTrue(atJSONOffset jsonOffset: Int32) {
@@ -427,44 +507,62 @@ extension JSONDescription {
         buffer.writeInteger(jsonOffset)
     }
     
-    mutating func describeArray(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
+    mutating func describeArray(atJSONOffset jsonOffset: Int32) -> ArrayStartContext {
         let indexOffset = buffer.writerIndex
         buffer.writeInteger(JSONType.array.rawValue)
         buffer.writeInteger(jsonOffset)
         buffer.reserveCapacity(buffer.readableBytes + 12)
         buffer.moveWriterIndex(forwardBy: 12)
         
-        return UnfinishedDescription(
+        return ArrayStartContext(
             indexOffset: indexOffset,
             firstChildIndexOffset: buffer.writerIndex
         )
     }
     
-    mutating func describeObject(atJSONOffset jsonOffset: Int32) -> UnfinishedDescription {
+    mutating func describeObject(atJSONOffset jsonOffset: Int32) -> ObjectStartContext {
         let indexOffset = buffer.writerIndex
         buffer.writeInteger(JSONType.object.rawValue)
         buffer.writeInteger(jsonOffset)
         buffer.reserveCapacity(buffer.readableBytes + 12)
         buffer.moveWriterIndex(forwardBy: 12)
         
-        return UnfinishedDescription(
+        return ObjectStartContext(
             indexOffset: indexOffset,
             firstChildIndexOffset: buffer.writerIndex
         )
     }
-    
-    mutating func complete(_ unfinished: UnfinishedDescription, withResult result: _ArrayObjectDescription) {
-        buffer.setInteger(result.jsonByteCount, at: unfinished.indexOffset &+ Constants.jsonLengthOffset)
-        buffer.setInteger(result.valueCount, at: unfinished.indexOffset &+ Constants.arrayObjectPairCountOffset)
-        
-        let indexLength = Int32(buffer.writerIndex &- unfinished.firstChildIndexOffset)
-        buffer.setInteger(indexLength, at: unfinished.indexOffset &+ Constants.arrayObjectTotalIndexLengthOffset)
-    }
-}
 
-struct UnfinishedDescription {
-    fileprivate let indexOffset: Int
-    fileprivate let firstChildIndexOffset: Int
+    mutating func complete(
+        _ unfinished: ObjectStartContext,
+        withResult result: JSONToken.ObjectEnd
+    ) {
+        buffer.setInteger(
+            Int32(result.byteLength),
+            at: unfinished.indexOffset &+ Constants.jsonLengthOffset
+        )
+        buffer.setInteger(
+            Int32(result.memberCount),
+            at: unfinished.indexOffset &+ Constants.arrayObjectPairCountOffset
+        )
+
+        let indexLength = buffer.writerIndex &- unfinished.firstChildIndexOffset
+        buffer.setInteger(Int32(indexLength), at: unfinished.indexOffset &+ Constants.arrayObjectTotalIndexLengthOffset)
+    }
+
+    mutating func complete(_ unfinished: ArrayStartContext, withResult result: JSONToken.ArrayEnd) {
+        buffer.setInteger(
+            Int32(result.byteLength),
+            at: unfinished.indexOffset &+ Constants.jsonLengthOffset
+        )
+        buffer.setInteger(
+            Int32(result.memberCount),
+            at: unfinished.indexOffset &+ Constants.arrayObjectPairCountOffset
+        )
+
+        let indexLength = buffer.writerIndex &- unfinished.firstChildIndexOffset
+        buffer.setInteger(Int32(indexLength), at: unfinished.indexOffset &+ Constants.arrayObjectTotalIndexLengthOffset)
+    }
 }
 
 extension String {
@@ -512,16 +610,17 @@ extension JSONDescription {
         }
     }
     
-    private func snakeCasedEqual(key: [UInt8], pointer: UnsafePointer<UInt8>, length: Int) -> Bool {
+    private func snakeCasedEqual(key: UnsafeBufferPointer<UInt8>, pointer: UnsafePointer<UInt8>, length: Int) -> Bool {
         let keySize = key.count
         var characters = Data(bytes: pointer, count: length)
+        // TODO: Compare without copy
         convertSnakeCasing(for: &characters)
         
         // The string was guaranteed by us to still be valid UTF-8
         let byteCount = characters.count
         if byteCount == keySize {
             return characters.withUnsafeBytes { buffer in
-                return memcmp(key, buffer.baseAddress!, keySize) == 0
+                return memcmp(key.baseAddress!, buffer.baseAddress!, keySize) == 0
             }
         }
         
@@ -547,33 +646,42 @@ extension JSONDescription {
         var index = 0
         var offset = Constants.firstArrayObjectChildOffset
         
-        guard let count: Int32 = self.buffer.getInteger(at: Constants.arrayObjectPairCountOffset) else {
+        guard
+            let count: Int32 = self.buffer.getInteger(at: Constants.arrayObjectPairCountOffset),
+            count > 0
+        else {
             return nil
         }
-        
-        let key = [UInt8](key.utf8)
-        let keySize = key.count
-        
-        for _ in 0..<count {
-            // Fetch the bounds for the key in JSON
-            let bounds = dataBounds(atIndexOffset: offset)
-            
-            // Does the key match our search?
-            if !convertingSnakeCasing, bounds.length == keySize, memcmp(key, json + Int(bounds.offset), Int(bounds.length)) == 0 {
-                return (index, offset)
-            } else if convertingSnakeCasing, snakeCasedEqual(key: key, pointer: json + Int(bounds.offset), length: Int(bounds.length)) {
-                return (index, offset)
+
+        var key = key
+        return key.withUTF8 { key in
+            let keySize = key.count
+
+            for _ in 0..<count {
+                // Fetch the bounds for the key in JSON
+                let bounds = dataBounds(atIndexOffset: offset)
+
+                // Does the key match our search?
+                if !convertingSnakeCasing, bounds.length == keySize, memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
+                    return (index, offset)
+                } else if convertingSnakeCasing, snakeCasedEqual(
+                    key: key,
+                    pointer: json + Int(bounds.offset),
+                    length: Int(bounds.length)
+                ) {
+                    return (index, offset)
+                }
+
+                // Skip key
+                skipIndex(atOffset: &offset)
+
+                // Skip value
+                skipIndex(atOffset: &offset)
+                index = index &+ 1
             }
-            
-            // Skip key
-            skipIndex(atOffset: &offset)
-            
-            // Skip value
-            skipIndex(atOffset: &offset)
-            index = index &+ 1
+
+            return nil
         }
-        
-        return nil
     }
     
     func valueOffset(
@@ -631,9 +739,14 @@ extension JSONDescription {
         
         for _ in 0..<count {
             let bounds = dataBounds(atIndexOffset: offset)
-            let escaping = self.type(atOffset: offset) == .stringWithEscaping
-            
-            if var stringData = try? bounds.makeStringData(from: buffer, escaping: escaping, unicode: unicode) {
+
+            let string = JSONToken.String(
+                start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+                byteLength: Int(bounds.length),
+                usesEscaping: self.type(atOffset: offset) == .stringWithEscaping
+            )
+
+            if var stringData = try? string.makeStringData(from: buffer, unicode: unicode) {
                 if convertingSnakeCasing {
                     convertSnakeCasing(for: &stringData)
                 }
@@ -649,50 +762,53 @@ extension JSONDescription {
         
         return keys
     }
-    
-    func dataBounds(atIndexOffset indexOffset: Int) -> Bounds {
+
+    /// While similar to `jsonBounds`, it denotes the data of _interest_. Specifically for a `String`, these are the contents between
+    /// quotes
+    func dataBounds(atIndexOffset indexOffset: Int) -> (offset: Int32, length: Int32) {
         let jsonOffset = self.jsonOffset(at: indexOffset)
         
         switch self.type(atOffset: indexOffset) {
         case .boolFalse:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: 5
             )
         case .boolTrue, .null:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: 4
             )
         case .string, .stringWithEscaping:
-            return Bounds(
+            return (
                 offset: jsonOffset &+ 1,
                 length: jsonLength(at: indexOffset) &- 2
             )
         case .object, .array, .integer, .floatingNumber:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: jsonLength(at: indexOffset)
             )
         }
     }
-    
-    func jsonBounds(at indexOffset: Int) -> Bounds {
+
+    /// The bounds of the entire JSON token, including quotes for a String
+    func jsonBounds(at indexOffset: Int) -> (offset: Int32, length: Int32) {
         let jsonOffset = self.jsonOffset(at: indexOffset)
         
         switch self.type(atOffset: indexOffset) {
         case .boolFalse:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: 5
             )
         case .boolTrue, .null:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: 4
             )
         case .object, .array, .string, .stringWithEscaping, .integer, .floatingNumber:
-            return Bounds(
+            return (
                 offset: jsonOffset,
                 length: jsonLength(at: indexOffset)
             )
@@ -716,9 +832,17 @@ extension JSONDescription {
         return offset
     }
     
-    func stringBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+    func stringBounds(
+        forKey key: String,
+        convertingSnakeCasing: Bool,
+        in pointer: UnsafePointer<UInt8>
+    ) -> JSONToken.String? {
         guard
-            let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)
+            let (_, offset) = valueOffset(
+                forKey: key,
+                convertingSnakeCasing: convertingSnakeCasing,
+                in: pointer
+            )
         else {
             return nil
         }
@@ -727,41 +851,64 @@ extension JSONDescription {
         guard type == .string || type == .stringWithEscaping else { return nil }
         
         let bounds = dataBounds(atIndexOffset: offset)
-        
-        return (bounds, type == .stringWithEscaping)
+        return JSONToken.String(
+            start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+            byteLength: Int(bounds.length),
+            usesEscaping: type == .stringWithEscaping
+        )
     }
     
-    func integerBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> Bounds? {
+    func integerBounds(
+        forKey key: String,
+        convertingSnakeCasing: Bool,
+        in pointer: UnsafePointer<UInt8>
+    ) -> JSONToken.Number? {
         guard
-            let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)
+            let (_, offset) = valueOffset(
+                forKey: key,
+                convertingSnakeCasing: convertingSnakeCasing,
+                in: pointer
+            )
         else {
             return nil
         }
         
         let type = self.type(atOffset: offset)
         guard type == .integer else { return nil }
-        
-        return dataBounds(atIndexOffset: offset)
+
+        let bounds = dataBounds(atIndexOffset: offset)
+        return JSONToken.Number(
+            start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+            end: JSONSourcePosition(byteIndex: Int(bounds.offset + bounds.length)),
+            isInteger: true
+        )
     }
     
-    func floatingBounds(forKey key: String, convertingSnakeCasing: Bool, in pointer: UnsafePointer<UInt8>) -> (Bounds, Bool)? {
+    func floatingBounds(
+        forKey key: String,
+        convertingSnakeCasing: Bool,
+        in pointer: UnsafePointer<UInt8>
+    ) -> JSONToken.Number? {
         guard
-            let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: pointer)
+            let (_, offset) = valueOffset(
+                forKey: key,
+                convertingSnakeCasing: convertingSnakeCasing,
+                in: pointer
+            )
         else {
             return nil
         }
         
         let type = self.type(atOffset: offset)
         guard type == .integer || type == .floatingNumber else { return nil }
-        
-        return (dataBounds(atIndexOffset: offset), type == .floatingNumber)
+
+        let bounds = dataBounds(atIndexOffset: offset)
+        return JSONToken.Number(
+            start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+            byteLength: Int(bounds.length),
+            isInteger: type == .integer
+        )
     }
-}
-
-
-struct _ArrayObjectDescription {
-    let valueCount: Int32
-    let jsonByteCount: Int32
 }
 
 enum JSONType: UInt8 {

@@ -1,5 +1,6 @@
 import Foundation
-import NIO
+import NIOCore
+import JSONCore
 
 /// An array containing only JSONValue types.
 ///
@@ -50,20 +51,29 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
     
     /// Parses the data as a JSON Array and configures this JSONArray to index and represent the JSON data
     public init(data: Data) throws {
-        var buffer = allocator.buffer(capacity: data.count)
+        var buffer = ByteBufferAllocator().buffer(capacity: data.count)
         buffer.writeBytes(data)
         try self.init(buffer: buffer)
     }
     
     /// Parses the buffer as a JSON Array and configures this JSONArray to index and represent the JSON data
-    public init(buffer: ByteBuffer) throws {
+    public init(buffer: ByteBuffer) throws(JSONParserError) {
         self.jsonBuffer = buffer
         
         self.description = try buffer.withUnsafeReadableBytes { buffer in
-            let buffer = buffer.bindMemory(to: UInt8.self)
-            return try JSONParser.scanValue(fromPointer: buffer.baseAddress!, count: buffer.count)
-        }
-        
+            Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
+                let buffer = buffer.bindMemory(to: UInt8.self)
+                var tokenizer = JSONTokenizer(
+                    pointer: buffer.baseAddress!,
+                    count: buffer.count,
+                    destination: JSONDescription()
+                )
+
+                try tokenizer.scanValue()
+                return tokenizer.destination
+            }
+        }.get()
+
         guard description.topLevelType == .array else {
             throw JSONParserError.expectedArray
         }
@@ -71,16 +81,20 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
     
     /// An internal type that creates an empty JSONArray with a predefined expected description size
     private init(descriptionSize: Int) {
-        var buffer = allocator.buffer(capacity: 4_096)
+        var buffer = ByteBufferAllocator().buffer(capacity: 4_096)
         buffer.writeInteger(UInt8.squareLeft)
         buffer.writeInteger(UInt8.squareRight)
         self.jsonBuffer = buffer
         
         var description = JSONDescription(size: descriptionSize)
-        let partialObject = description.describeArray(atJSONOffset: 0)
-        let result = _ArrayObjectDescription(valueCount: 0, jsonByteCount: 2)
-        description.complete(partialObject, withResult: result)
-        
+        let context = description.arrayStartFound(JSONToken.ArrayStart(start: .init(byteIndex: 0)))
+        let result = JSONToken.ArrayEnd(
+            start: JSONSourcePosition(byteIndex: 0),
+            end: JSONSourcePosition(byteIndex: 2),
+            memberCount: 0
+        )
+        description.arrayEndFound(result, context: context)
+
         self.description = description
     }
     
@@ -117,7 +131,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
             jsonBuffer.writeInteger(UInt8.comma)
         }
         
-        let valueJSONOffset = Int32(jsonBuffer.writerIndex)
+        let valueJSONOffset = jsonBuffer.writerIndex
         let indexOffset = description.buffer.writerIndex
         
         defer {
@@ -126,44 +140,61 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
             description.incrementArrayCount(jsonSize: Int32(extraSize), atIndexOffset: indexOffset)
         }
         
-        func write(_ string: String) -> Bounds {
+        func write(_ string: String) -> (offset: Int, length: Int) {
             jsonBuffer.writeString(string)
-            let length = Int32(jsonBuffer.writerIndex) - valueJSONOffset
-            return Bounds(offset: valueJSONOffset, length: length)
+            let length = jsonBuffer.writerIndex - valueJSONOffset
+            return (offset: valueJSONOffset, length: length)
         }
         
         switch value {
         case let value as String:
+            // TODO: Without copy
             let (escaped, bytes) = value.escaped
             jsonBuffer.writeInteger(UInt8.quote)
             jsonBuffer.writeBytes(bytes)
             jsonBuffer.writeInteger(UInt8.quote)
-            let length = Int32(jsonBuffer.writerIndex) - valueJSONOffset
-            let bounds = Bounds(offset: valueJSONOffset, length: length)
-            description.describeString(at: bounds, escaped: escaped)
+            let length = jsonBuffer.writerIndex - valueJSONOffset
+            let token = JSONToken.String(
+                start: JSONSourcePosition(byteIndex: jsonBuffer.writerIndex),
+                byteLength: length,
+                usesEscaping: escaped
+            )
+            description.describeString(token)
         case let value as Int:
-            description.describeNumber(at: write(String(value)), floatingPoint: false)
+            let bounds = write(String(value))
+            let token = JSONToken.Number(
+                start: JSONSourcePosition(byteIndex: bounds.offset),
+                byteLength: bounds.length,
+                isInteger: true
+            )
+            description.describeNumber(token)
         case let value as Double:
-            description.describeNumber(at: write(String(value)), floatingPoint: true)
+            let bounds = write(String(value))
+            let token = JSONToken.Number(
+                start: JSONSourcePosition(byteIndex: bounds.offset),
+                byteLength: bounds.length,
+                isInteger: false
+            )
+            description.describeNumber(token)
         case let value as Bool:
             if value {
                 jsonBuffer.writeStaticString(boolTrue)
-                description.describeTrue(atJSONOffset: valueJSONOffset)
+                description.describeTrue(atJSONOffset: Int32(valueJSONOffset))
             } else {
                 jsonBuffer.writeStaticString(boolFalse)
-                description.describeFalse(atJSONOffset: valueJSONOffset)
+                description.describeFalse(atJSONOffset: Int32(valueJSONOffset))
             }
         case is NSNull:
             jsonBuffer.writeStaticString(nullBytes)
-            description.describeNull(atJSONOffset: valueJSONOffset)
+            description.describeNull(atJSONOffset: Int32(valueJSONOffset))
         case var value as JSONArray:
             jsonBuffer.writeBuffer(&value.jsonBuffer)
-            description.addNestedDescription(value.description, at: valueJSONOffset)
+            description.addNestedDescription(value.description, at: Int32(valueJSONOffset))
         case var value as JSONObject:
             jsonBuffer.writeBuffer(&value.jsonBuffer)
-            description.addNestedDescription(value.description, at: valueJSONOffset)
+            description.addNestedDescription(value.description, at: Int32(valueJSONOffset))
         default:
-            fatalError("Unsupported JSON value \(value)")
+            preconditionFailure("Unsupported JSON value \(value)")
         }
     }
 
@@ -176,8 +207,8 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
 //    }
 
     private func _checkBounds(_ index: Int) {
-        assert(index <= description.arrayObjectCount(), "Index out of bounds. \(index) > \(count)")
-        assert(index >= 0, "Negative index requested for JSONArray.")
+        precondition(index <= description.arrayObjectCount(), "Index out of bounds. \(index) > \(count)")
+        precondition(index >= 0, "Negative index requested for JSONArray.")
     }
     
     private func value(at index: Int, in json: UnsafePointer<UInt8>) -> JSONValue {
@@ -210,14 +241,30 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable {
             return true
         case .boolFalse:
             return false
-        case .string:
-            return description.dataBounds(atIndexOffset: offset).makeString(from: json, escaping: false, unicode: true)!
-        case .stringWithEscaping:
-            return description.dataBounds(atIndexOffset: offset).makeString(from: json, escaping: true, unicode: true)!
+        case .string, .stringWithEscaping:
+            let bounds = description.dataBounds(atIndexOffset: offset)
+            let string = JSONToken.String(
+                start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+                byteLength: Int(bounds.length),
+                usesEscaping: type == .stringWithEscaping
+            )
+            return string.makeString(from: json, unicode: true)!
         case .integer:
-            return description.dataBounds(atIndexOffset: offset).makeInt(from: json)!
+            let bounds = description.dataBounds(atIndexOffset: offset)
+            let number = JSONToken.Number(
+                start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+                byteLength: Int(bounds.length),
+                isInteger: type == .integer
+            )
+            return number.makeInt(from: json)!
         case .floatingNumber:
-            return description.dataBounds(atIndexOffset: offset).makeDouble(from: json, floating: true)
+            let bounds = description.dataBounds(atIndexOffset: offset)
+            let number = JSONToken.Number(
+                start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+                byteLength: Int(bounds.length),
+                isInteger: type == .integer
+            )
+            return number.makeDouble(from: json)
         case .null:
             return NSNull()
         }
