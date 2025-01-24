@@ -257,7 +257,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable, C
                 byteLength: Int(bounds.length),
                 usesEscaping: type == .stringWithEscaping
             )
-            return string.makeString(from: json, unicode: true)!
+            return string.makeString(from: json, unicode: true)
         case .integer:
             let bounds = jsonDescription.dataBounds(atIndexOffset: offset)
             let number = JSONToken.Number(
@@ -265,7 +265,7 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable, C
                 byteLength: Int(bounds.length),
                 isInteger: type == .integer
             )
-            return number.makeInt(from: json)!
+            return number.makeInt(from: json)
         case .floatingNumber:
             let bounds = jsonDescription.dataBounds(atIndexOffset: offset)
             let number = JSONToken.Number(
