@@ -104,7 +104,7 @@ extension JSONToken.String {
                         // Move past this character
                         i = i &+ 1
                     default:
-                        throw JSONParserError.unexpectedEscapingToken
+                        throw UTF8ParsingError()
                     }
 
                     // 'flush' the accumulated `unicodes` to the buffer
@@ -154,7 +154,7 @@ extension JSONToken.Number {
     }
 }
 
-struct UTF8ParsingError: Error {}
+public struct UTF8ParsingError: Error {}
 
 fileprivate func decodeUnicode<Collection: RangeReplaceableCollection<UInt8>>(
     from data: inout Collection,

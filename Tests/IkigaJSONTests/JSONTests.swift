@@ -3,6 +3,10 @@ import NIO
 import Foundation
 import IkigaJSON
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#endif
+
 var newParser: IkigaJSONDecoder {
     return IkigaJSONDecoder()
 }
@@ -33,6 +37,113 @@ final class IkigaJSONTests: XCTestCase {
         """.data(using: .utf8)!
         
         XCTAssertNoThrow(try IkigaJSONDecoder().decode([UInt64].self, from: json))
+    }
+
+    func testLargeJSONPerformance() throws {
+        let smallJson = """
+        {
+            "id": "0",
+            "username": "Joannis",
+            "role": "admin",
+            "awesome": true,
+            "superAwesome": false
+        }
+        """
+
+        let json = "[" + [String](repeating: smallJson, count: 1000)
+            .joined(separator: ",") + "]"
+
+        struct User: Decodable, Equatable {
+            let id: String
+            let username: String
+            let role: String
+            let awesome: Bool
+            let superAwesome: Bool
+        }
+
+        let jsonData = json.data(using: .utf8)!
+        let jsonBuffer = ByteBuffer(string: json)
+        let iterations = 1_000
+        let expected = try JSONDecoder().decode([User].self, from: jsonBuffer)
+
+        func bench(_ perform: () throws -> [User]) rethrows -> TimeInterval {
+            let start = Date()
+            var entities: [User]
+            var i = 0
+            repeat {
+                entities = try perform()
+                i += 1
+            } while i < iterations
+            let end = Date()
+            XCTAssertEqual(entities, expected)
+            return end.timeIntervalSince(start)
+        }
+
+        let ikiga = IkigaJSONDecoder()
+        let ikigaTime = try bench {
+            try ikiga.decode([User].self, from: jsonBuffer)
+        }
+
+        let foundation = JSONDecoder()
+        let foundationTime = try bench {
+            try foundation.decode([User].self, from: jsonData)
+        }
+
+        XCTAssertLessThan(ikigaTime, foundationTime)
+        print("Ikiga", ikigaTime)
+        print("Foundation", foundationTime)
+    }
+
+    func testSmallJSONPerformance() throws {
+        let json = """
+        {
+            "id": "0",
+            "username": "Joannis",
+            "role": "admin",
+            "awesome": true,
+            "superAwesome": false
+        }
+        """
+
+        struct User: Decodable, Equatable {
+            let id: String
+            let username: String
+            let role: String
+            let awesome: Bool
+            let superAwesome: Bool
+        }
+
+        let jsonData = json.data(using: .utf8)!
+        let jsonBuffer = ByteBuffer(string: json)
+        let iterations = 1_000_000
+        let expected = try JSONDecoder().decode(User.self, from: jsonBuffer)
+
+        func bench(_ perform: () throws -> User) rethrows -> TimeInterval {
+            let start = Date()
+            var entity: User
+            var i = 0
+            repeat {
+                entity = try perform()
+                i += 1
+            } while i < iterations
+            let end = Date()
+            XCTAssertEqual(entity, expected)
+            return end.timeIntervalSince(start)
+        }
+
+        let ikiga = IkigaJSONDecoder()
+        let ikigaTime = try bench {
+            try ikiga.decode(User.self, from: jsonBuffer)
+        }
+
+        let foundation = JSONDecoder()
+        let foundationTime = try bench {
+            try foundation.decode(User.self, from: jsonData)
+        }
+
+        XCTAssertLessThan(ikigaTime, foundationTime)
+        print("Ikiga", ikigaTime)
+        print("Foundation", foundationTime)
     }
 
     func testURL() throws {
@@ -160,6 +271,15 @@ final class IkigaJSONTests: XCTestCase {
         }
         
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+
+    func testEncodeNestedArray() throws {
+        struct Object: Codable {
+            let array = Array(repeating: Set<String>(minimumCapacity: 12), count: 8)
+        }
+
+        let data = try IkigaJSONEncoder().encode(Object())
+        XCTAssertEqual(String(data: data, encoding: .utf8), "{\"array\":[[],[],[],[],[],[],[],[]]}")
     }
     
     func testDecodeOptionalUUID() throws {

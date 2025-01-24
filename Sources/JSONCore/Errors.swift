@@ -1,5 +1,5 @@
-public enum JSONParserError: Error, CustomStringConvertible, Sendable {
-    public enum Reason: CustomStringConvertible, Sendable {
+public enum JSONParserError: Error, Sendable {
+    public enum Reason: Sendable {
         case expectedObjectKey
         case expectedObjectClose
         case expectedTopLevelObject
@@ -7,7 +7,9 @@ public enum JSONParserError: Error, CustomStringConvertible, Sendable {
         case expectedColon
         case expectedComma
         case expectedArrayClose
-        
+
+        // Marked unavailable to save binary size
+        @_unavailableInEmbedded
         public var description: String {
             switch self {
             case .expectedObjectKey:
@@ -28,18 +30,10 @@ public enum JSONParserError: Error, CustomStringConvertible, Sendable {
         }
     }
     
+    // Marked unavailable to save binary size
+    @_unavailableInEmbedded
     public var description: String {
         switch self {
-        case .expectedArray:
-            return "Expected JSON Array"
-        case .expectedObject:
-            return "Expected JSON Object"
-        case .internalStateError, .unknownJSONStrategy, .missingKeyedContainer, .missingUnkeyedContainer, .decodingError, .endOfArray, .missingSuperDecoder:
-            return "JSON Decoder Error"
-        case .invalidDate:
-            return "Incorrect Date"
-        case .invalidData:
-            return "Invalid String"
         case .endOfObject:
             return "Unexpected end of object"
         case .invalidTopLevelObject:
@@ -50,27 +44,23 @@ public enum JSONParserError: Error, CustomStringConvertible, Sendable {
             return "Invalid Literal"
         case .invalidObjectIdLiteral:
             return "Invalid ObjectId"
+        case .internalStateError:
+            return "Internal State Error"
         case .missingToken(_, _, let uInt8, let reason):
             return "Missing token '\(Character(.init(uInt8)))': \(reason)"
         case .unexpectedToken(_, _, let uInt8, let reason):
             return "Unexpected token '\(Character(.init(uInt8)))': \(reason)"
-        case .unexpectedEscapingToken:
-            return "Unexpected escaping token"
         }
     }
     
-    public var column: Int? {
+    // Marked unavailable to save binary size
+    @_unavailableInEmbedded
+    public var column: Int {
         switch self {
-        case .expectedObject, .expectedArray, .unexpectedEscapingToken:
-            return nil
         case .internalStateError(_, column: let column):
             return column
-        case .invalidDate, .invalidData:
-            return nil
         case .endOfObject(_, column: let column):
             return column
-        case .unknownJSONStrategy, .missingKeyedContainer, .missingUnkeyedContainer, .decodingError, .missingSuperDecoder, .endOfArray:
-            return nil
         case .invalidTopLevelObject(_, column: let column):
             return column
         case .missingData(_, column: let column):
@@ -85,19 +75,15 @@ public enum JSONParserError: Error, CustomStringConvertible, Sendable {
             return column
         }
     }
-    
-    public var line: Int? {
+
+    // Marked unavailable to save binary size
+    @_unavailableInEmbedded
+    public var line: Int {
         switch self {
-        case .expectedObject, .expectedArray, .unexpectedEscapingToken:
-            return nil
         case .internalStateError(line: let line, _):
             return line
-        case .invalidDate, .invalidData:
-            return nil
         case .endOfObject(line: let line, _):
             return line
-        case .unknownJSONStrategy, .missingKeyedContainer, .missingUnkeyedContainer, .decodingError, .missingSuperDecoder, .endOfArray:
-            return nil
         case .invalidTopLevelObject(line: let line, _):
             return line
         case .missingData(line: let line, _):
@@ -113,33 +99,30 @@ public enum JSONParserError: Error, CustomStringConvertible, Sendable {
         }
     }
     
-    case expectedArray
-    case expectedObject
     case internalStateError(line: Int, column: Int)
-    case invalidDate(String?)
-    case invalidData(String?)
     case endOfObject(line: Int, column: Int)
-    case unknownJSONStrategy
-    case missingKeyedContainer
-    case missingUnkeyedContainer
-    case missingSuperDecoder
-    case endOfArray
-    case decodingError(expected: Any.Type, keyPath: [CodingKey])
     case invalidTopLevelObject(line: Int, column: Int)
     case missingData(line: Int, column: Int)
     case invalidLiteral(line: Int, column: Int)
     case invalidObjectIdLiteral(line: Int, column: Int)
     case missingToken(line: Int, column: Int, token: UInt8, reason: Reason)
     case unexpectedToken(line: Int, column: Int, token: UInt8, reason: Reason)
-    case unexpectedEscapingToken
 }
 
-package struct TypeConversionError<F: FixedWidthInteger & Sendable>: Error {
+public struct TypeConversionError<F: FixedWidthInteger & Sendable>: Error {
     let from: F
     let to: Any.Type
 
-    package init(from: F, to: Any.Type) {
+    public init(from: F, to: Any.Type) {
         self.from = from
         self.to = to
     }
 }
+
+// Marked unavailable to save binary size
+@_unavailableInEmbedded
+extension JSONParserError: CustomStringConvertible {}
+
+// Marked unavailable to save binary size
+@_unavailableInEmbedded
+extension JSONParserError.Reason: CustomStringConvertible {}

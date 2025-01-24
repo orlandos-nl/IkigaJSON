@@ -236,8 +236,13 @@ public struct IkigaJSONEncoder: @unchecked Sendable {
         let encoder = _JSONEncoder(userInfo: userInfo, settings: settings)
         try value.encode(to: encoder)
         encoder.writeEnd()
-        let data = Data(bytes: encoder.data.pointer, count: encoder.offset)
-        let object = try JSONObject(data: data)
+        let data = ByteBuffer(
+            bytes: UnsafeBufferPointer(
+                start: encoder.data.pointer,
+                count: encoder.data.offset
+            )
+        )
+        let object = try JSONObject(buffer: data)
         encoder.cleanUp()
         return object
     }
@@ -409,7 +414,7 @@ fileprivate final class _JSONEncoder: Encoder {
                     didWriteValue = hadWrittenValue
                 }
             @unknown default:
-                throw JSONParserError.unknownJSONStrategy
+                throw JSONDecoderError.unknownJSONStrategy
             }
             
             return true
@@ -438,7 +443,7 @@ fileprivate final class _JSONEncoder: Encoder {
                     didWriteValue = hadWrittenValue
                 }
             @unknown default:
-                throw JSONParserError.unknownJSONStrategy
+                throw JSONDecoderError.unknownJSONStrategy
             }
             
             return true
@@ -699,7 +704,7 @@ fileprivate struct UnkeyedJSONEncodingContainer: UnkeyedEncodingContainer {
         
         let encoder = _JSONEncoder(codingPath: codingPath, userInfo: self.encoder.userInfo, data: self.encoder.data)
         try value.encode(to: encoder)
-        if encoder.didWriteValue {
+        if encoder.didWriteValue || encoder.didHaveContainers {
             self.count += 1
             self.encoder.didWriteValue = true
         } else if !encoder.didWriteValue, !encoder.didHaveContainers, self.encoder.offset - offsetBeforeComma > 0 {

@@ -35,13 +35,13 @@ public enum JSONToken: Sendable, Hashable {
             end.byteOffset &- start.byteOffset
         }
 
-        package init(start: JSONSourcePosition, end: JSONSourcePosition, isInteger: Bool) {
+        public init(start: JSONSourcePosition, end: JSONSourcePosition, isInteger: Bool) {
             self.start = start
             self.end = end
             self.isInteger = isInteger
         }
 
-        package init(start: JSONSourcePosition, byteLength: Int, isInteger: Bool) {
+        public init(start: JSONSourcePosition, byteLength: Int, isInteger: Bool) {
             self.start = start
             self.end = JSONSourcePosition(byteIndex: start.byteOffset + byteLength)
             self.isInteger = isInteger
@@ -57,13 +57,13 @@ public enum JSONToken: Sendable, Hashable {
             end.byteOffset &- start.byteOffset
         }
 
-        package init(start: JSONSourcePosition, byteLength: Int, usesEscaping: Bool) {
+        public init(start: JSONSourcePosition, byteLength: Int, usesEscaping: Bool) {
             self.start = start
             self.end = JSONSourcePosition(byteIndex: start.byteOffset + byteLength)
             self.usesEscaping = usesEscaping
         }
 
-        package init(start: JSONSourcePosition, end: JSONSourcePosition, usesEscaping: Bool) {
+        public init(start: JSONSourcePosition, end: JSONSourcePosition, usesEscaping: Bool) {
             self.start = start
             self.end = end
             self.usesEscaping = usesEscaping
@@ -78,7 +78,7 @@ public enum JSONToken: Sendable, Hashable {
         }
         public let byteLength = 4
 
-        package init(start: JSONSourcePosition) {
+        public init(start: JSONSourcePosition) {
             self.start = start
         }
     }
@@ -91,7 +91,7 @@ public enum JSONToken: Sendable, Hashable {
         }
         public let byteLength = 4
 
-        package init(start: JSONSourcePosition) {
+        public init(start: JSONSourcePosition) {
             self.start = start
         }
     }
@@ -104,7 +104,7 @@ public enum JSONToken: Sendable, Hashable {
         }
         public let byteLength = 5
 
-        package init(start: JSONSourcePosition) {
+        public init(start: JSONSourcePosition) {
             self.start = start
         }
     }
@@ -112,7 +112,7 @@ public enum JSONToken: Sendable, Hashable {
     public struct ArrayStart: Sendable, Hashable {
         public let start: JSONSourcePosition
 
-        package init(start: JSONSourcePosition) {
+        public init(start: JSONSourcePosition) {
             self.start = start
         }
     }
@@ -126,7 +126,7 @@ public enum JSONToken: Sendable, Hashable {
             end.byteOffset &- start.byteOffset
         }
 
-        package init(start: JSONSourcePosition, end: JSONSourcePosition, memberCount: Int) {
+        public init(start: JSONSourcePosition, end: JSONSourcePosition, memberCount: Int) {
             self.start = start
             self.end = end
             self.memberCount = memberCount
@@ -136,7 +136,7 @@ public enum JSONToken: Sendable, Hashable {
     public struct ObjectStart: Sendable, Hashable {
         public let start: JSONSourcePosition
 
-        package init(start: JSONSourcePosition) {
+        public init(start: JSONSourcePosition) {
             self.start = start
         }
     }
@@ -150,7 +150,7 @@ public enum JSONToken: Sendable, Hashable {
             end.byteOffset &- start.byteOffset
         }
 
-        package init(start: JSONSourcePosition, end: JSONSourcePosition, memberCount: Int) {
+        public init(start: JSONSourcePosition, end: JSONSourcePosition, memberCount: Int) {
             self.start = start
             self.end = end
             self.memberCount = memberCount
@@ -161,7 +161,7 @@ public enum JSONToken: Sendable, Hashable {
 public struct JSONSourcePosition: Sendable, Hashable {
     public let byteOffset: Int
 
-    @usableFromInline package init(byteIndex: Int) {
+    public init(byteIndex: Int) {
         self.byteOffset = byteIndex
     }
 }

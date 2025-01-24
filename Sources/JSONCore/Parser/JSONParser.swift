@@ -1,9 +1,7 @@
-import Foundation
-
 /// This type is responsible for creating a JSONDescription for an inputted JSON buffer
 public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable {
     /// Creates a new JSONParser and initializes it
-    package init(
+    public init(
         pointer: UnsafePointer<UInt8>,
         count: Int,
         destination: Destination
@@ -14,7 +12,7 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable {
     }
 
     /// The amount of parsed bytes from the `pointer`. Also the first index we have to parse next since programmers start at 0
-    package private(set) var currentOffset = 0
+    public private(set) var currentOffset = 0
     
     /// The pointer that will be parsed
     internal private(set) var pointer: UnsafePointer<UInt8>
