@@ -79,6 +79,10 @@ public struct IkigaJSONDecoder: Sendable {
     /// This API can be used when the data wasn't originally available as `Data` so you remove the need for copying data.
     /// This can save a lot of performance.
     public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> D {
+        try _decode(type, from: buffer).element
+    }
+
+    public func _decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> (element: D, parsed: Int) {
         let pointer = buffer.baseAddress!
         var parser = JSONTokenizer(
             pointer: pointer,
@@ -86,7 +90,7 @@ public struct IkigaJSONDecoder: Sendable {
             destination: JSONDescription()
         )
         try parser.scanValue()
-        
+
         let decoder = _JSONDecoder(
             description: parser.destination,
             codingPath: [],
@@ -94,9 +98,9 @@ public struct IkigaJSONDecoder: Sendable {
             settings: settings
         )
         let type = try D(from: decoder)
-        return type
+        return (type, parser.currentOffset)
     }
-    
+
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable>(_ type: D.Type, from data: Data) throws -> D {
         return try data.withUnsafeBytes { buffer in
@@ -138,7 +142,18 @@ public struct IkigaJSONDecoder: Sendable {
             return try self.decode(type, from: buffer.bindMemory(to: UInt8.self))
         }
     }
-    
+
+    /// Parses the Decodable type from a SwiftNIO `ByteBuffer`.
+    public func decode<D: Decodable>(_ type: D.Type, from byteBuffer: inout ByteBuffer) throws -> D {
+        var element: D!
+        try byteBuffer.readWithUnsafeReadableBytes { buffer in
+            let (_element, count) = try self._decode(type, from: buffer.bindMemory(to: UInt8.self))
+            element = _element
+            return count
+        }
+        return element
+    }
+
     /// Parses the Decodable type from `[UInt8]`. This is the equivalent for JSONDecoder's Decode function.
     public func decode<D: Decodable, S: Sequence>(_: D.Type, from bytes: S) throws -> D where S.Element == UInt8 {
         // N.B.: As of Swift 5.3, everything String-related and almost every sequence and collection type (other than transforms like LazySequence) provides contiguous storage. This is currently the most efficient known way of getting UTF-8 bytes from a non-bridged String.
