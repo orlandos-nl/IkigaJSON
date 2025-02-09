@@ -1,4 +1,5 @@
 import NIOCore
+import JSONCore
 
 public struct StreamingJSONLinesDecoder<Element: Decodable> {
     private let maxElementSize: Int
@@ -42,10 +43,14 @@ public struct StreamingJSONLinesDecoder<Element: Decodable> {
                     let element = try decoder.decode(Element.self, from: &buffer)
                     elements.append(element)
                     state = .expectingCR
-                } catch {
-                    buffer.moveReaderIndex(to: readerIndex)
-                    buffer.slice()
-                    return elements
+                } catch let error as JSONParserError {
+                    if case .missingData = error {
+                        buffer.moveReaderIndex(to: readerIndex)
+                        buffer.discardReadBytes()
+                        return elements
+                    } else {
+                        throw error
+                    }
                 }
             case .carriageReturn:
                 guard case .expectingCR = state else {
@@ -68,7 +73,7 @@ public struct StreamingJSONLinesDecoder<Element: Decodable> {
             }
         }
 
-        buffer.slice()
+        buffer.discardReadBytes()
         return elements
     }
 }

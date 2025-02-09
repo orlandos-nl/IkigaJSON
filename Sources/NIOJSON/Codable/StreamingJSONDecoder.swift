@@ -1,4 +1,6 @@
 import NIOCore
+import JSONCore
+
 public struct StreamingJSONArrayDecoder<Element: Decodable> {
     enum State {
         // Before the array has openend
@@ -73,11 +75,15 @@ public struct StreamingJSONArrayDecoder<Element: Decodable> {
                         let element = try decoder.decode(Element.self, from: &buffer)
                         elements.append(element)
                         expectingCommaOrEnd = true
-                    } catch {
-                        buffer.moveReaderIndex(to: readerIndex)
-                        state = .arrayOpen(expectingCommaOrEnd: expectingCommaOrEnd)
-                        buffer.slice()
-                        return elements
+                    } catch let error as JSONParserError {
+                        if case .missingData = error {
+                            buffer.moveReaderIndex(to: readerIndex)
+                            state = .arrayOpen(expectingCommaOrEnd: expectingCommaOrEnd)
+                            buffer.discardReadBytes()
+                            return elements
+                        } else {
+                            throw error
+                        }
                     }
                 case .comma where expectingCommaOrEnd:
                     buffer.moveReaderIndex(forwardBy: 1)
@@ -91,7 +97,7 @@ public struct StreamingJSONArrayDecoder<Element: Decodable> {
                 }
             }
 
-            buffer.slice()
+            buffer.discardReadBytes()
             state = .arrayOpen(expectingCommaOrEnd: expectingCommaOrEnd)
             return elements
         case .arrayClosed:

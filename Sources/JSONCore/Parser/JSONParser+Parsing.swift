@@ -128,7 +128,7 @@ extension JSONTokenizer {
             try scanArray()
         case .f: // false
             guard count > 5 else {
-                throw JSONParserError.invalidLiteral(line: line, column: column)
+                throw JSONParserError.missingData(line: line, column: column)
             }
             
             guard pointer[1] == .a, pointer[2] == .l, pointer[3] == .s, pointer[4] == .e else {
@@ -139,7 +139,7 @@ extension JSONTokenizer {
             destination.booleanFalseFound(.init(start: .init(byteIndex: currentOffset)))
         case .t: // true
             guard count > 4 else {
-                throw JSONParserError.invalidLiteral(line: line, column: column)
+                throw JSONParserError.missingData(line: line, column: column)
             }
             
             guard pointer[1] == .r, pointer[2] == .u, pointer[3] == .e else {
@@ -150,7 +150,7 @@ extension JSONTokenizer {
             destination.booleanTrueFound(.init(start: .init(byteIndex: currentOffset)))
         case .n: // null
             guard count > 4 else {
-                throw JSONParserError.invalidLiteral(line: line, column: column)
+                throw JSONParserError.missingData(line: line, column: column)
             }
             
             guard pointer[1] == .u, pointer[2] == .l, pointer[3] == .l else {

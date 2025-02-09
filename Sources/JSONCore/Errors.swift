@@ -32,7 +32,7 @@ public enum JSONParserError: Error, Sendable {
     
     // Marked unavailable to save binary size
     @_unavailableInEmbedded
-    public var description: String {
+    private var shortDescription: String {
         switch self {
         case .endOfObject:
             return "Unexpected end of object"
@@ -51,6 +51,11 @@ public enum JSONParserError: Error, Sendable {
         case .unexpectedToken(_, _, let uInt8, let reason):
             return "Unexpected token '\(Character(.init(uInt8)))': \(reason)"
         }
+    }
+
+    @_unavailableInEmbedded
+    public var description: String {
+        return "\(shortDescription) at \(line):\(column)"
     }
     
     // Marked unavailable to save binary size
