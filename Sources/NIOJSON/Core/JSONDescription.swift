@@ -248,10 +248,11 @@ extension JSONDescription {
     /// The supplied Int is the location where the value will be stored in JSON
     /// This will be used to update all locations in JSON accordingly
     func addNestedDescription(_ description: JSONDescription, at jsonOffset: Int32) {
-        description.advanceAllJSONOffsets(by: jsonOffset)
-        self.writeBuffer(description)
+        let copy = description.slice(from: 0, length: description.writtenBytes)
+        copy.advanceAllJSONOffsets(by: jsonOffset)
+        self.writeBuffer(copy)
     }
-    
+
     /// Moves this index description and all it's child descriptions their JSON offsets forward
     func advanceAllJSONOffsets(by jsonOffset: Int32) {
         self.advance(at: Constants.jsonLocationOffset, by: jsonOffset)
@@ -274,7 +275,6 @@ extension JSONDescription {
         guard let count: Int32 = getInteger(
             at: Constants.arrayObjectPairCountOffset
         ) else {
-            print(writtenBytes)
             fatalError("Invalid Array or Object description. Missing header data. Please file an issue on Github.")
         }
         
@@ -507,7 +507,7 @@ extension JSONDescription {
             
             buffer.prepareForRewrite(atOffset: Int(jsonBounds.offset), oldSize: Int(jsonBounds.length), newSize: _length)
             buffer.setBuffer(object.jsonBuffer, at: Int(jsonBounds.offset))
-            let newDescription = object.jsonDescription
+            let newDescription = object.jsonDescription.slice(from: 0, length: object.jsonDescription.writtenBytes)
             newDescription.advanceAllJSONOffsets(by: jsonBounds.offset)
             rewriteObjectArray(locallyAt: indexOffset, from: newDescription)
         case let array as JSONArray:
