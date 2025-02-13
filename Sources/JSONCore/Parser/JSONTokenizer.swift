@@ -48,22 +48,41 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable {
     
     /// Skips all whitespace (space, tab, carriage-return and newline)
     fileprivate mutating func _skipWhitespace() {
-        var offset = 0
+        let tabs = SIMD16<UInt8>(repeating: UInt8(ascii: "\t"))
+        let spaces = SIMD16<UInt8>(repeating: UInt8(ascii: " "))
+        let newlines = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
+        let returns = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+
+        loop: while count >= 16 {
+            let rawPointer = UnsafeRawPointer(pointer)
         
-        loop: while offset < count {
-            let byte = pointer[offset]
-            
-            if byte == .newLine {
-                line += 1
-                lastLineOffset = currentOffset + 1
-            } else if byte != .space && byte != .tab && byte != .carriageReturn {
-                break loop
+            let bytes = rawPointer.loadUnaligned(as: SIMD16<UInt8>.self)
+            let tabsMask = bytes .== tabs
+            let spacesMask = bytes .== spaces
+            let newlinesMask = bytes .== newlines
+            let returnsMask = bytes .== returns
+            let mask = tabsMask .| spacesMask .| newlinesMask .| returnsMask
+
+            if !any(mask) {
+                return
             }
-            
-            offset = offset &+ 1
+
+            if all(mask) {
+                advance(16)
+                continue loop
+            }
+
+            break
         }
-        
-        advance(offset)
+
+        while count > 0 {
+            let byte = pointer.pointee
+            if byte == UInt8.space || byte == UInt8.tab || byte == UInt8.carriageReturn || byte == UInt8.newLine {
+                advance(1)
+            } else {
+                break
+            }
+        }
     }
 }
 

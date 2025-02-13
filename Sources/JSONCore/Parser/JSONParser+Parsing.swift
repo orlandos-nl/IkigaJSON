@@ -36,7 +36,7 @@ extension JSONTokenizer {
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON
                 // Commas are required between each element
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedComma)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer[-1], reason: .expectedComma)
             } else {
                 // Parsed a comma, always override didParseFirstValue
                 // Overwriting this in the stack is not heavier than an if statement
@@ -87,7 +87,7 @@ extension JSONTokenizer {
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON because a value was already parsed
                 // Commas are required between each element
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedComma)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer[-1], reason: .expectedComma)
             } else {
                 // Parsed a comma, always override didParseFirstValue
                 // Overwriting this in the stack is not heavier than an if statement
@@ -99,7 +99,7 @@ extension JSONTokenizer {
             try skipWhitespace()
             
             guard nextByte() == .colon else {
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedColon)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer[-1], reason: .expectedColon)
             }
             
             try skipWhitespace()
@@ -131,7 +131,9 @@ extension JSONTokenizer {
                 throw JSONParserError.missingData(line: line, column: column)
             }
             
-            guard pointer[1] == .a, pointer[2] == .l, pointer[3] == .s, pointer[4] == .e else {
+            let bytes = UnsafeRawPointer(pointer).loadUnaligned(fromByteOffset: 1, as: SIMD4<UInt8>.self)
+            
+            guard all(bytes .== SIMD4<UInt8>(UInt8(ascii: "a"), UInt8(ascii: "l"), UInt8(ascii: "s"), UInt8(ascii: "e"))) else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -142,7 +144,9 @@ extension JSONTokenizer {
                 throw JSONParserError.missingData(line: line, column: column)
             }
             
-            guard pointer[1] == .r, pointer[2] == .u, pointer[3] == .e else {
+            let bytes = UnsafeRawPointer(pointer).loadUnaligned(as: SIMD4<UInt8>.self)
+            
+            guard all(bytes .== SIMD4<UInt8>(UInt8(ascii: "t"), UInt8(ascii: "r"), UInt8(ascii: "u"), UInt8(ascii: "e"))) else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -152,8 +156,10 @@ extension JSONTokenizer {
             guard count > 4 else {
                 throw JSONParserError.missingData(line: line, column: column)
             }
+
+            let bytes = UnsafeRawPointer(pointer).loadUnaligned(as: SIMD4<UInt8>.self)
             
-            guard pointer[1] == .u, pointer[2] == .l, pointer[3] == .l else {
+            guard all(bytes .== SIMD4<UInt8>(UInt8(ascii: "n"), UInt8(ascii: "u"), UInt8(ascii: "l"), UInt8(ascii: "l"))) else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -222,6 +228,40 @@ extension JSONTokenizer {
         // This reduces the performance cost on parsing most strings, removing a second unneccessary check
         var didEscape = false
         defer { advance(currentIndex) }
+
+        let quoteSimd = SIMD16<UInt8>(repeating: UInt8(ascii: "\""))
+        let backslashSimd = SIMD16<UInt8>(repeating: UInt8(ascii: "\\"))
+
+        while currentIndex &+ 16 < count {
+            let bytes = UnsafeRawPointer(pointer).loadUnaligned(fromByteOffset: currentIndex, as: SIMD16<UInt8>.self)
+            let quotes = bytes .== quoteSimd
+            let hasQuote = any(quotes)
+            let backslashes = bytes .== backslashSimd
+            let hasBackslash = any(backslashes)
+
+            if hasBackslash {
+                didEscape = true
+            }
+            
+            if hasQuote {
+                quoteLoop: for i in 0..<16 {
+                    if quotes[i], !didEscape || pointer[currentIndex &+ i &- 1] != .backslash {
+                        currentIndex = currentIndex &+ i &+ 1
+                        break quoteLoop
+                    }
+                }
+                // Defer didn't trigger yet
+                let start = JSONSourcePosition(byteIndex: currentOffset)
+                destination.stringFound(.init(
+                    start: start,
+                    byteLength: currentIndex,
+                    usesEscaping: didEscape
+                ))
+                return
+            } else {
+                currentIndex = currentIndex &+ 16
+            }
+        }
 
         while currentIndex < count {
             defer { currentIndex = currentIndex &+ 1 }
