@@ -52,11 +52,12 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable {
         let spaces = SIMD16<UInt8>(repeating: UInt8(ascii: " "))
         let newlines = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
         let returns = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+        var currentIndex = 0
 
-        loop: while count >= 16 {
+        loop: while count &- currentIndex >= 16 {
             let rawPointer = UnsafeRawPointer(pointer)
-        
-            let bytes = rawPointer.loadUnaligned(as: SIMD16<UInt8>.self)
+
+            let bytes = rawPointer.loadUnaligned(fromByteOffset: currentIndex, as: SIMD16<UInt8>.self)
             let tabsMask = bytes .== tabs
             let spacesMask = bytes .== spaces
             let newlinesMask = bytes .== newlines
@@ -64,25 +65,27 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable {
             let mask = tabsMask .| spacesMask .| newlinesMask .| returnsMask
 
             if !any(mask) {
-                return
+                return advance(currentIndex)
             }
 
             if all(mask) {
-                advance(16)
+                currentIndex &+= 16
                 continue loop
             }
 
             break
         }
 
-        while count > 0 {
-            let byte = pointer.pointee
+        while currentIndex < count {
+            let byte = pointer[currentIndex]
             if byte == UInt8.space || byte == UInt8.tab || byte == UInt8.carriageReturn || byte == UInt8.newLine {
-                advance(1)
+                currentIndex &+= 1
             } else {
-                break
+                return advance(currentIndex)
             }
         }
+
+        advance(currentIndex)
     }
 }
 
