@@ -3,6 +3,10 @@ import NIO
 import Foundation
 import IkigaJSON
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#endif
+
 var newParser: IkigaJSONDecoder {
     return IkigaJSONDecoder()
 }
@@ -160,6 +164,15 @@ final class IkigaJSONTests: XCTestCase {
         }
         
         XCTAssertThrowsError(try newParser.decode(Test.self, from: json))
+    }
+
+    func testEncodeNestedArray() throws {
+        struct Object: Codable {
+            let array = Array(repeating: Set<String>(minimumCapacity: 12), count: 8)
+        }
+
+        let data = try IkigaJSONEncoder().encode(Object())
+        XCTAssertEqual(String(data: data, encoding: .utf8), "{\"array\":[[],[],[],[],[],[],[],[]]}")
     }
     
     func testDecodeOptionalUUID() throws {
@@ -825,7 +838,7 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testKeyDecoding() throws {
-        let parser = newParser
+        var parser = newParser
         parser.settings.keyDecodingStrategy = .convertFromSnakeCase
         
         struct Test: Codable {
@@ -935,7 +948,7 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        let user = try! newParser.decode(User.self, from: json)
+        let user = try newParser.decode(User.self, from: json)
         
         XCTAssertEqual(user.id, "0")
         XCTAssertEqual(user.username, "Joannis")
@@ -963,7 +976,7 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        let user = try! newParser.decode(User.self, from: json)
+        let user = try newParser.decode(User.self, from: json)
         
         XCTAssertEqual(user.id, "0")
         XCTAssertEqual(user.username, "Joannis")
@@ -978,7 +991,7 @@ final class IkigaJSONTests: XCTestCase {
     
     @available(OSX 10.12, *)
     func testISO8601DateStrategy() throws {
-        let decoder = newParser
+        var decoder = newParser
         decoder.settings.dateDecodingStrategy = .iso8601
         
         let date = Date()
@@ -1002,7 +1015,7 @@ final class IkigaJSONTests: XCTestCase {
     
     @available(OSX 10.12, *)
     func testEpochSecDateStrategy() throws {
-        let decoder = newParser
+        var decoder = newParser
         decoder.settings.dateDecodingStrategy = .secondsSince1970
         
         let date = Date()
@@ -1025,7 +1038,7 @@ final class IkigaJSONTests: XCTestCase {
     
     @available(OSX 10.12, *)
     func testEpochMSDateStrategy() throws {
-        let decoder = newParser
+        var decoder = newParser
         decoder.settings.dateDecodingStrategy = .millisecondsSince1970
         
         let date = Date()
@@ -1065,7 +1078,7 @@ final class IkigaJSONTests: XCTestCase {
             let superAwesome: Bool
         }
         
-        let user = try! newParser.decode(User.self, from: json)
+        let user = try newParser.decode(User.self, from: json)
         
         XCTAssertEqual(user.id, "0")
         XCTAssertEqual(user.username, "Joannis\tis\nawesome/\\\"")
@@ -1253,8 +1266,8 @@ final class IkigaJSONTests: XCTestCase {
             let data: Data
         }
         
-        let decoder = IkigaJSONDecoder()
-        
+        var decoder = IkigaJSONDecoder()
+
         decoder.settings.dataDecodingStrategy = .deferredToData
         var datas = try decoder.decode(Datas.self, from: "{\"data\":[1,2,3]}")
         XCTAssertEqual(datas.data, Data([1,2,3]))
@@ -1574,8 +1587,8 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(String(decoding: try encoder.encode(foob3), as: UTF8.self), #"{"foo1":0,"foo3":0}"#)
         XCTAssertEqual(String(decoding: try encoder.encode(foob4), as: UTF8.self), #"{"foo1":0,"foo2":0}"#)
         
-        let decoder = IkigaJSONDecoder()
-        
+        var decoder = IkigaJSONDecoder()
+
         decoder.settings.nilValueDecodingStrategy = .default
         XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0,"foo3":0}"#)), foob1)
         XCTAssertEqual(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo2":0,"foo3":0}"#)), foob2)

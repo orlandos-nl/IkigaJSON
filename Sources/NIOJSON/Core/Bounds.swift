@@ -1,3 +1,4 @@
+import JSONCore
 import Foundation
 
 fileprivate let lowercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
@@ -15,32 +16,29 @@ fileprivate extension UInt8 {
     }
 }
 
-internal struct Bounds {
-    var offset: Int32
-    var length: Int32
-    
+extension JSONToken.String {
     //// Makes a String from a pointer.
     /// Assumes the length is checked against the bounds `self`
     ///
     /// - see: `makeStringFromData` for more information
-    func makeString(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) -> String? {
-        if let data = try? makeStringData(from: pointer, escaping: escaping, unicode: unicode) {
+    func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
+        if let data = try? makeStringData(from: pointer, unicode: unicode) {
             return String(data: data, encoding: .utf8)
         }
-        
+
         return nil
     }
-    
+
     /// Makes a `Data` blob from a pointer. This data can be used to initialize a string or for comparison operations.
     /// Assumes the length is checked against the bounds `self`
     ///
     /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
     /// towards unescaping.
-    func makeStringData(from pointer: UnsafePointer<UInt8>, escaping: Bool, unicode: Bool) throws -> Data? {
-        var data = Data(bytes: pointer + Int(offset), count: Int(length))
-        
+    func makeStringData(from pointer: UnsafePointer<UInt8>, unicode: Bool) throws -> Data? {
+        var data = Data(bytes: pointer + start.byteOffset, count: byteLength)
+
         // If we can't take a shortcut by decoding immediately thanks to an escaping character
-        if escaping || unicode {
+        if usesEscaping || unicode {
             var i = 0
             var unicodes = [UInt16]()
 
@@ -51,23 +49,23 @@ internal struct Bounds {
                     unicodes.removeAll(keepingCapacity: true)
                 }
             }
-            
+
             next: while i < data.count {
                 let byte = data[i]
-                
-                unescape: if escaping {
+
+                unescape: if usesEscaping {
                     // If this character is not a baskslash or this was the last character
                     // We don't need to unescape the next character
-                    if byte != .backslash || i &+ 1 >= length {
+                    if byte != .backslash || i &+ 1 >= byteLength {
                         // Flush unprocessed unicodes and move past this character
                         flushUnicodes()
                         i = i &+ 1
                         break unescape
                     }
-                    
+
                     // Remove the backslash and translate the next character
                     data.remove(at: i)
-                    
+
                     switch data[i] {
                     case .backslash, .solidus, .quote:
                         // just removal needed
@@ -106,7 +104,7 @@ internal struct Bounds {
                         // Move past this character
                         i = i &+ 1
                     default:
-                        throw JSONParserError.unexpectedEscapingToken
+                        throw UTF8ParsingError()
                     }
 
                     // 'flush' the accumulated `unicodes` to the buffer
@@ -128,7 +126,9 @@ internal struct Bounds {
 
         return data
     }
-    
+}
+
+extension JSONToken.Number {
     /// Parses a `Double` from the pointer
     /// Assumes the length is checked against the bounds `self`
     ///
@@ -137,30 +137,29 @@ internal struct Bounds {
     /// Uses the fast path for doubles if possible, when failing falls back to Foundation.
     ///
     /// https://www.exploringbinary.com/fast-path-decimal-to-floating-point-conversion/
-    internal func makeDouble(from pointer: UnsafePointer<UInt8>, floating: Bool) -> Double {
-        let offset = Int(self.offset)
-        let length = Int(self.length)
-
-        if floating {
+    internal func makeDouble(from pointer: UnsafePointer<UInt8>) -> Double {
+        if isInteger {
+            return strtoi(pointer + start.byteOffset, length: byteLength)
+        } else {
             /// Falls back to the foundation implementation which makes too many copies for this use case
             ///
             /// Used when the implementation is unsure
-            return strtod(pointer + offset, length: length)
-        } else {
-            return strtoi(pointer + offset, length: length)
+            return strtod(pointer + start.byteOffset, length: byteLength)
         }
     }
     
     internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
-        var offset = Int(self.offset)
-        
-        return pointer.makeInt(offset: &offset, length: Int(length))
+        var offset = start.byteOffset
+        return pointer.makeInt(offset: &offset, length: Int(byteLength))
     }
 }
 
-struct UTF8ParsingError: Error {}
+public struct UTF8ParsingError: Error {}
 
-fileprivate func decodeUnicode(from data: inout Data, offset: inout Int) throws -> UInt16 {
+fileprivate func decodeUnicode<Collection: RangeReplaceableCollection<UInt8>>(
+    from data: inout Collection,
+    offset: inout Int
+) throws -> UInt16 where Collection.Index == Int {
     let hexCharacters = 4
     guard data.count - offset >= hexCharacters else {
         throw UTF8ParsingError()

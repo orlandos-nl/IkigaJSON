@@ -1,5 +1,3 @@
-import NIO
-
 // Lazily generate and load all exponents
 // TODO: Compile time?
 fileprivate let exponents: [Double] = {
@@ -25,7 +23,7 @@ func fastDouble(exponent: Int, significand: Double) -> Double? {
     }
 }
 
-extension UnsafePointer where Pointee == UInt8 {
+extension UnsafePointer<UInt8> {
     func makeInt(offset: inout Int, length: Int) -> Int? {
         let negative = self[offset] == .minus
         if negative {
@@ -55,18 +53,7 @@ extension UnsafePointer where Pointee == UInt8 {
     }
 }
 
-extension ByteBuffer {
-    func withBytePointer<T>(_ run: (UnsafePointer<UInt8>) throws -> T) rethrows -> T {
-        return try withUnsafeReadableBytes { buffer in
-            let buffer = buffer.bindMemory(to: UInt8.self)
-            return try run(buffer.baseAddress!)
-        }
-    }
-}
-
-internal let allocator = ByteBufferAllocator()
-
-internal extension UInt8 {
+extension UInt8 {
     static let backspace: UInt8 = 0x08
     static let tab: UInt8 = 0x09
     static let newLine: UInt8 = 0x0a
