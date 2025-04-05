@@ -168,7 +168,7 @@ final class IkigaJSONTests: XCTestCase {
 
     func testEncodeNestedArray() throws {
         struct Object: Codable {
-            let array = Array(repeating: Set<String>(minimumCapacity: 12), count: 8)
+            var array = Array(repeating: Set<String>(minimumCapacity: 12), count: 8)
         }
 
         let data = try IkigaJSONEncoder().encode(Object())

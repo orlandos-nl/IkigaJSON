@@ -1,6 +1,6 @@
 import Foundation
 import NIOCore
-import JSONCore
+import _JSONCore
 
 public enum JSONArrayError: Error {
     case expectedArray

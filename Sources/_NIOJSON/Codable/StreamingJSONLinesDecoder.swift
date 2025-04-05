@@ -1,5 +1,5 @@
 import NIOCore
-import JSONCore
+import _JSONCore
 
 public struct StreamingJSONLinesDecoder<Element: Decodable> {
     private let maxElementSize: Int

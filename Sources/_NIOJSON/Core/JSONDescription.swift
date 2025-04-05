@@ -1,6 +1,6 @@
 import Foundation
 import NIOCore
-import JSONCore
+import _JSONCore
 
 /// Stores data efficiently to describe JSON to be parsed lazily into a concrete type
 /// from the original buffer

@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 import NIOCore
-import JSONCore
+import _JSONCore
 
 var isoFormatter: ISO8601DateFormatter { ISO8601DateFormatter() }
 let isoDateFormatter: DateFormatter = {

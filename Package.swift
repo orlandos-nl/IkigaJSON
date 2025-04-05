@@ -14,8 +14,7 @@ let package = Package(
         .library(
             name: "IkigaJSON",
             targets: ["IkigaJSON"]
-        ),
-        .library(name: "JSONCore", targets: ["JSONCore"])
+        )
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -24,21 +23,21 @@ let package = Package(
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages which this package depends on.
-        .target(name: "JSONCore"),
+        .target(name: "_JSONCore"),
         .target(
-            name: "NIOJSON",
+            name: "_NIOJSON",
             dependencies: [
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
-                .target(name: "JSONCore"),
+                .target(name: "_JSONCore"),
             ]
         ),
         .target(
             name: "IkigaJSON",
             dependencies: [
                 .product(name: "NIOCore", package: "swift-nio"),
-                .target(name: "JSONCore"),
-                .target(name: "NIOJSON"),
+                .target(name: "_JSONCore"),
+                .target(name: "_NIOJSON"),
             ]
         ),
         .testTarget(

@@ -1,7 +1,7 @@
 import Foundation
 import NIOCore
 import NIOFoundationCompat
-import JSONCore
+import _JSONCore
 
 public enum JSONObjectError: Error {
     case expectedObject
