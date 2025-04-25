@@ -149,6 +149,30 @@ print(user["username"].string)
 print(user["username"] as? String)
 ```
 
+### Streaming JSON
+
+IkigaJSON also supports streaming JSON decoding for both arrays and JSON Lines.
+
+```swift
+var decoder = StreamingJSONArrayDecoder(decoding: User.self)
+for try await chunk in request.body {
+    let users = try decoder.parseBuffer(chunk)
+    // Do something with the newly parsed users
+}
+```
+
+You can also stream JSON lines:
+
+```swift
+var decoder = StreamingJSONLinesDecoder(decoding: User.self)
+for try await chunk in request.body {
+    let users = try decoder.parseBuffer(chunk)
+    // Do something with the newly parsed users
+}
+```
+
+
+
 ### SwiftNIO support
 
 The encoders and decoders support SwiftNIO.
