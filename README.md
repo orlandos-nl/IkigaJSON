@@ -6,7 +6,7 @@ Aside from being more performant, IkigaJSON has a much lower and more stable mem
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
-Please note that Swift libraries need to be built in RELEASE compilation mode in order to judge performnce. If you're testing performance on a DEBUG build, you'll find severe mis-optimisations by the compiler that cannot reasonably be fixed in libraries. When building Swift code on DEBUG compilation, it can be 10-20x slower than equivalent code on RELEASE.
+> **Important:** Swift libraries need to be built in **RELEASE compilation mode** in order to judge performance. If you're testing performance on a DEBUG build, you'll find severe mis-optimisations by the compiler that cannot reasonably be fixed in libraries. When building Swift code on DEBUG compilation, it can be 10-20x slower than equivalent code on RELEASE.
 
 ### Server-Side Swift
 
