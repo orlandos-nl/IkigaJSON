@@ -167,7 +167,7 @@ package final class JSONDescription: JSONTokenizerDestination {
     /// Creates a new JSONDescription reserving 512 bytes by default.
     init(size: Int = 4096) {
         self.pointer = .allocate(byteCount: size, alignment: 1)
-        self.readOnlyCopy = true
+        self.readOnlyCopy = false
     }
 }
 
