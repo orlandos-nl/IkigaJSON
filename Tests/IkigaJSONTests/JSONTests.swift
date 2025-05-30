@@ -39,6 +39,12 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertNoThrow(try IkigaJSONDecoder().decode([UInt64].self, from: json))
     }
 
+    func testMemoryLeak() throws {
+        for _ in 0..<100_000 {
+            _ = try! JSONObject(buffer: .init(string: "{}"))
+        }
+    }
+
     func testURL() throws {
         struct Info: Codable, Equatable {
             let website: URL

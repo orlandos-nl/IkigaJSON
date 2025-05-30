@@ -74,8 +74,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable, CustomS
                 Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
                     let buffer = buffer.bindMemory(to: UInt8.self)
                     var tokenizer = JSONTokenizer(
-                        pointer: buffer.baseAddress!,
-                        count: buffer.count,
+                        bytes: buffer,
                         destination: JSONDescription()
                     )
 

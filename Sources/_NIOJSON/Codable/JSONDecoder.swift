@@ -83,10 +83,8 @@ public struct IkigaJSONDecoder: Sendable {
     }
 
     public func _decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> (element: D, parsed: Int) {
-        let pointer = buffer.baseAddress!
         var parser = JSONTokenizer(
-            pointer: pointer,
-            count: buffer.count,
+            bytes: buffer,
             destination: JSONDescription()
         )
         try parser.scanValue()
@@ -94,7 +92,7 @@ public struct IkigaJSONDecoder: Sendable {
         let decoder = _JSONDecoder(
             description: parser.destination,
             codingPath: [],
-            pointer: pointer,
+            pointer: buffer.baseAddress!,
             settings: settings
         )
         let type = try D(from: decoder)
@@ -181,10 +179,8 @@ public struct IkigaJSONDecoder: Sendable {
     ) throws -> D {
         return try buffer.readWithUnsafeMutableReadableBytes { buffer -> (Int, D) in
             let buffer = buffer.bindMemory(to: UInt8.self)
-            let pointer = buffer.baseAddress!
             var parser = JSONTokenizer(
-                pointer: pointer,
-                count: buffer.count,
+                bytes: UnsafeBufferPointer(buffer),
                 destination: JSONDescription()
             )
             try parser.scanValue()
@@ -192,7 +188,7 @@ public struct IkigaJSONDecoder: Sendable {
             let decoder = _JSONDecoder(
                 description: parser.destination,
                 codingPath: [],
-                pointer: pointer,
+                pointer: buffer.baseAddress!,
                 settings: settings
             )
             let type = try D(from: decoder)
