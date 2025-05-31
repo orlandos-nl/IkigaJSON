@@ -61,13 +61,14 @@ public struct StreamingJSONLinesDecoder<Element: Decodable> {
                 state = .expectingLF
                 continue
             case .newLine:
-                guard case .expectingLF = state else {
+                switch state {
+                case .expectingLF, .expectingCR:
+                    buffer.moveReaderIndex(forwardBy: 1)
+                    state = .expectingValue
+                    continue
+                default:
                     throw JSONLinesDecodingError.unexpectedLineFeed
                 }
-
-                buffer.moveReaderIndex(forwardBy: 1)
-                state = .expectingValue
-                continue
             default:
                 throw JSONLinesDecodingError.unexpectedToken(byte)
             }
