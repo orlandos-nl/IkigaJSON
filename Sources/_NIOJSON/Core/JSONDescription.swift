@@ -529,7 +529,7 @@ extension JSONDescription {
     }
 
     func addJSONSize(of size: Int32) {
-        assert(topLevelType == .object || topLevelType == .object)
+        assert(topLevelType == .array || topLevelType == .object)
 
         advance(at: Constants.jsonLengthOffset, by: size)
     }
