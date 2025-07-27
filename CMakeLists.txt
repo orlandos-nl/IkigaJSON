@@ -10,7 +10,7 @@ else()
     include(ExternalProject)
 endif()
 
-file(GLOB_RECURSE JSON_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Sources/JSONCore/*.swift")
+file(GLOB_RECURSE JSON_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Sources/_JSONCore/*.swift")
 add_library(JSON ${JSON_CORE_SOURCES})
 
 if(DEFINED ENV{IDF_PATH})
