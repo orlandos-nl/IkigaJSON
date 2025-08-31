@@ -1,5 +1,3 @@
-<a href="https://unbeatable.software"><img src="./assets/IkigaJSON.png" /></a>
-
 IkigaJSON is a really fast JSON parser. IkigaJSON is competitive to the modern Foundation JSON in benchmarks, and outperforms older versions of Foundation JSON by a large margin.
 
 Aside from being more performant, IkigaJSON has a much lower and more stable memory footprint, too! By design, IkigaJSON scales better than Foundation on larger JSON payloads. All while providing an easy to use API with Codable support.
