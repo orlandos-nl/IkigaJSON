@@ -17,8 +17,11 @@ let package = Package(
         )
     ],
     traits: [
+        .default(enabledTraits: ["ByteBufferSupport", "FoundationSupport"]),
         .trait(name: "Spans"),
         .trait(name: "SourcePositions"),
+        .trait(name: "ByteBufferSupport"),
+        .trait(name: "FoundationSupport"),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -36,8 +39,8 @@ let package = Package(
         .target(
             name: "_NIOJSON",
             dependencies: [
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["ByteBufferSupport"])),
+                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["ByteBufferSupport"])),
                 .target(name: "_JSONCore"),
             ]
         ),
