@@ -7,6 +7,9 @@ import IkigaJSON
 import FoundationEssentials
 #endif
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 var newParser: IkigaJSONDecoder {
     return IkigaJSONDecoder()
 }
@@ -19,6 +22,9 @@ var newEncoder: IkigaJSONEncoder {
     return IkigaJSONEncoder()
 }
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 final class IkigaJSONTests: XCTestCase {
     func testDecodeUInt64() throws {
         let json = """
@@ -995,7 +1001,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertFalse(user.superAwesome)
     }
     
-    @available(OSX 10.12, *)
     func testISO8601DateStrategy() throws {
         var decoder = newParser
         decoder.settings.dateDecodingStrategy = .iso8601
@@ -1019,7 +1024,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(Int(test.createdAt.timeIntervalSince1970), Int(date.timeIntervalSince1970))
     }
     
-    @available(OSX 10.12, *)
     func testEpochSecDateStrategy() throws {
         var decoder = newParser
         decoder.settings.dateDecodingStrategy = .secondsSince1970
@@ -1042,7 +1046,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(Int(test.createdAt.timeIntervalSince1970), Int(date.timeIntervalSince1970))
     }
     
-    @available(OSX 10.12, *)
     func testEpochMSDateStrategy() throws {
         var decoder = newParser
         decoder.settings.dateDecodingStrategy = .millisecondsSince1970
@@ -1322,7 +1325,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(json["datas"].array?[0].bool, true)
     }
     
-    @available(OSX 10.12, *)
     func testArrayDateEncoding() throws {
         struct Dates: Codable {
             var dates = [Date()]
@@ -1363,7 +1365,6 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertEqual(json["dates"].array?[0].string, result)
     }
     
-    @available(OSX 10.12, *)
     func testDateEncoding() throws {
         struct DateTest: Codable {
             var date = Date()
