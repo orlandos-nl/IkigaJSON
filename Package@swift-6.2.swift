@@ -33,7 +33,8 @@ let package = Package(
         .target(
             name: "_JSONCore",
             swiftSettings: [
-                .enableExperimentalFeature("LifetimeDependence")
+                .enableExperimentalFeature("LifetimeDependence"),
+                .enableExperimentalFeature("Lifetimes")
             ]
         ),
         .target(

@@ -1,10 +1,10 @@
-#if swift(>=6.2) && Spans
+#if swift(>=6.2.1) && Spans
 /// This type is responsible for creating a JSONDescription for an inputted JSON buffer
 public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~Escapable {
     /// Creates a new JSONParser and initializes it
-    @lifetime(copy span)
+    @_lifetime(copy span)
     public init(
-        span: borrowing Span<UInt8>,
+        span: Span<UInt8>,
         destination: Destination
     ) {
         self.bytes = span
@@ -16,7 +16,7 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
     /// The Bytes are owned by the JSONTokenizer for the duration of its usage
     /// As soon as the type is destroyed/consumed, you get ownership of the bytes
     /// Any deallocation of the bytes should happen after JSONTokenizer is destroyed/consumed
-    @lifetime(borrow bytes)
+    @_lifetime(borrow bytes)
     public init(
         bytes: borrowing UnsafeBufferPointer<UInt8>,
         destination: Destination
@@ -68,7 +68,7 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
     #endif
 
     /// Advances the amount of bytes processed and updates the related offset and count
-    @lifetime(copy self)
+    @_lifetime(copy self)
     @usableFromInline
     internal mutating func advance(_ offset: Int) {
         currentOffset += offset
