@@ -114,6 +114,10 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
         pointer = UnsafeMutableRawBufferPointer(start: newPointer, count: newSize)
     }
 
+    func reset() {
+        writtenBytes = 0
+    }
+
     @inlinable
     package func moveWriterIndex(forwardBy offset: Int) {
         ensureWritableRoom(for: offset)
@@ -799,7 +803,7 @@ extension JSONDescriptionView {
 
 extension JSONDescriptionProtocol {
     @usableFromInline
-    func convertSnakeCasing(for characters: inout UnsafeMutableBufferPointer<UInt8>) {
+    func removeSnakeCasing(from characters: inout UnsafeMutableBufferPointer<UInt8>) {
         var size = characters.count
         var i = 0
         
@@ -822,20 +826,23 @@ extension JSONDescriptionProtocol {
             
             i = i + 1
         }
+        characters = UnsafeMutableBufferPointer(start: characters.baseAddress!, count: size)
     }
     
-    private func snakeCasedEqual(key: UnsafeBufferPointer<UInt8>, pointer: UnsafePointer<UInt8>, length: Int) -> Bool {
-        let keySize = key.count
-        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: length) { buffer in
-            var buffer = buffer
-            memcpy(buffer.baseAddress!, pointer, length)
+    private func snakeCasedEqual(
+        codingKey: UnsafeBufferPointer<UInt8>,
+        snakeCasedKey: UnsafeBufferPointer<UInt8>
+    ) -> Bool {
+        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: snakeCasedKey.count) { newKey in
+            var newKey = newKey
+            memcpy(newKey.baseAddress!, snakeCasedKey.baseAddress!, snakeCasedKey.count)
                 
-            convertSnakeCasing(for: &buffer)
-            guard buffer.count == keySize else {
+            removeSnakeCasing(from: &newKey)
+            guard newKey.count == codingKey.count else {
                 return false
             }
 
-            return memcmp(key.baseAddress!, buffer.baseAddress!, length) == 0
+            return memcmp(codingKey.baseAddress!, newKey.baseAddress!, codingKey.count) == 0
         }
     }
     
@@ -881,9 +888,11 @@ extension JSONDescriptionProtocol {
                 if !convertingSnakeCasing, bounds.length == keySize, memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
                     return (index, offset)
                 } else if convertingSnakeCasing, snakeCasedEqual(
-                    key: key,
-                    pointer: json + Int(bounds.offset),
-                    length: Int(bounds.length)
+                    codingKey: key,
+                    snakeCasedKey: UnsafeBufferPointer(
+                        start: json + Int(bounds.offset),
+                        count: Int(bounds.length)
+                    )
                 ) {
                     return (index, offset)
                 }
@@ -965,9 +974,9 @@ extension JSONDescriptionProtocol {
                 usesEscaping: self.type(atOffset: offset) == .stringWithEscaping
             )
 
-            try? string.withStringBuffer(from: buffer, unicode: unicode) { buffer in
+            try? string.withTemporaryStringBuffer(from: buffer, unicode: unicode) { buffer in
                 if convertingSnakeCasing {
-                    convertSnakeCasing(for: &buffer)
+                    removeSnakeCasing(from: &buffer)
                 }
                 
                 if let key = String(bytes: buffer, encoding: .utf8) {

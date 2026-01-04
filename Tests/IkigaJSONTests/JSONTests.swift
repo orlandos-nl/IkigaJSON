@@ -1573,7 +1573,10 @@ final class IkigaJSONTests: XCTestCase {
             }
         }
         
-        let foob1 = Foo(0, 0, 0), foob2 = Foo(nil, 0, 0), foob3 = Foo(0, nil, 0), foob4 = Foo(0, 0, nil)
+        let foob1 = Foo(0, 0, 0)
+        let foob2 = Foo(nil, 0, 0)
+        let foob3 = Foo(0, nil, 0)
+        let foob4 = Foo(0, 0, nil)
         var encoder = IkigaJSONEncoder()
         
         encoder.settings.nilValueEncodingStrategy = .default

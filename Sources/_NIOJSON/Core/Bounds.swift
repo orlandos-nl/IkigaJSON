@@ -22,7 +22,7 @@ extension JSONToken.String {
     ///
     /// - see: `makeStringFromData` for more information
     func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        try? withStringBuffer(from: pointer, unicode: unicode) { buffer in
+        try? withTemporaryStringBuffer(from: pointer, unicode: unicode) { buffer in
             return String(bytes: buffer, encoding: .utf8)
         }
     }
@@ -32,7 +32,7 @@ extension JSONToken.String {
     ///
     /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
     /// towards unescaping.
-    func withStringBuffer<T>(
+    func withTemporaryStringBuffer<T>(
         from pointer: UnsafePointer<UInt8>,
         unicode: Bool,
         _ body: (inout UnsafeMutableBufferPointer<UInt8>) throws -> T

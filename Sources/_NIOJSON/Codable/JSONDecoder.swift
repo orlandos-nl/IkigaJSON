@@ -129,6 +129,7 @@ fileprivate struct LockedJSONDescription: @unchecked Sendable {
     func withDescription<T>(_ body: (JSONDescription) throws -> T) rethrows -> T {
         lock.lock()
         defer { lock.unlock() }
+        description.reset()
         return try body(description)
     }
 }
