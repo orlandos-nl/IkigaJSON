@@ -180,7 +180,7 @@ extension JSONToken.Number {
 public struct UTF8ParsingError: Error {}
 
 fileprivate func decodeUnicode(
-    from bytes: (UInt8, UInt8, UInt8, UInt8),
+    from bytes: (UInt8, UInt8, UInt8, UInt8)
 ) throws -> UInt16 {
     guard
         let hex0 = bytes.0.decodeHex(),
