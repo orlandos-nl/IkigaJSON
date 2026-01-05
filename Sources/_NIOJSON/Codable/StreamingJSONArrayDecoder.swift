@@ -1,6 +1,9 @@
 import NIOCore
 import _JSONCore
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 public struct StreamingJSONArrayDecoder<Element: Decodable> {
     enum State {
         // Before the array has openend

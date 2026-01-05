@@ -22,11 +22,9 @@ extension JSONToken.String {
     ///
     /// - see: `makeStringFromData` for more information
     func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        if let data = try? makeStringData(from: pointer, unicode: unicode) {
-            return String(data: data, encoding: .utf8)
+        try? withTemporaryStringBuffer(from: pointer, unicode: unicode) { buffer in
+            return String(bytes: buffer, encoding: .utf8)
         }
-
-        return nil
     }
 
     /// Makes a `Data` blob from a pointer. This data can be used to initialize a string or for comparison operations.
@@ -34,97 +32,122 @@ extension JSONToken.String {
     ///
     /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
     /// towards unescaping.
-    func makeStringData(from pointer: UnsafePointer<UInt8>, unicode: Bool) throws -> Data? {
-        var data = Data(bytes: pointer + start.byteOffset, count: byteLength)
+    func withTemporaryStringBuffer<T>(
+        from pointer: UnsafePointer<UInt8>,
+        unicode: Bool,
+        _ body: (inout UnsafeMutableBufferPointer<UInt8>) throws -> T
+    ) throws -> T {
+        let source = UnsafeBufferPointer(start: pointer + start.byteOffset, count: byteLength)
 
-        // If we can't take a shortcut by decoding immediately thanks to an escaping character
-        if usesEscaping || unicode {
-            var i = 0
+        return try withUnsafeTemporaryAllocation(of: UInt8.self, capacity: byteLength) { buffer in
+            var buffer = buffer
+
+            guard usesEscaping else {
+                memcpy(buffer.baseAddress!, source.baseAddress!, byteLength)
+                return try body(&buffer)
+            }
+
+            // If we can't take a shortcut by decoding immediately thanks to an escaping character
+            var readerIndex = 0
+            var writerIndex = 0
             var unicodes = [UInt16]()
 
             func flushUnicodes() {
                 if !unicodes.isEmpty {
-                    let character = String(utf16CodeUnits: unicodes, count: unicodes.count)
-                    data.insert(contentsOf: character.utf8, at: i)
+                    var character = String(utf16CodeUnits: unicodes, count: unicodes.count)
+                    character.withUTF8 { utf8 in
+                        for byte in utf8 {
+                            buffer[writerIndex] = byte
+                            writerIndex += 1
+                        }
+                    }
                     unicodes.removeAll(keepingCapacity: true)
                 }
             }
 
-            next: while i < data.count {
-                let byte = data[i]
+            next: while readerIndex < byteLength {
+                let byte = source[readerIndex]
+                
+                // If this character is not a baskslash or this was the last character
+                // We don't need to unescape the next character
+                if byte != .backslash || readerIndex + 1 >= byteLength {
+                    // Flush unprocessed unicodes and move past this character
+                    flushUnicodes()
+                    buffer[writerIndex] = byte
+                    writerIndex += 1
+                    readerIndex += 1
+                    continue next
+                }
 
-                unescape: if usesEscaping {
-                    // If this character is not a baskslash or this was the last character
-                    // We don't need to unescape the next character
-                    if byte != .backslash || i &+ 1 >= byteLength {
-                        // Flush unprocessed unicodes and move past this character
-                        flushUnicodes()
-                        i = i &+ 1
-                        break unescape
-                    }
+                // Remove the backslash and translate the next character
+                readerIndex += 1
 
-                    // Remove the backslash and translate the next character
-                    data.remove(at: i)
-
-                    switch data[i] {
-                    case .backslash, .solidus, .quote:
-                        // just removal needed
-                        flushUnicodes()
-
-                        // Move past this character
-                        i = i &+ 1
-
-                        continue next
-                    case .u:
-                        // `\u` indicates a unicode character
-                        data.remove(at: i)
-                        let unicode = try decodeUnicode(from: &data, offset: &i)
-                        unicodes.append(unicode)
-
-                        // Continue explicitly, so that we do not trigger the unicode 'flush' flow
-                        continue next
-                    case .t:
-                        data[i] = .tab
-                        // Move past this character
-                        i = i &+ 1
-                    case .r:
-                        data[i] = .carriageReturn
-                        // Move past this character
-                        i = i &+ 1
-                    case .n:
-                        data[i] = .newLine
-                        // Move past this character
-                        i = i &+ 1
-                    case .f:
-                        data[i] = .formFeed
-                        // Move past this character
-                        i = i &+ 1
-                    case .b:
-                        data[i] = .backspace
-                        // Move past this character
-                        i = i &+ 1
-                    default:
+                if source[readerIndex] == .u {
+                    // `\u` indicates a unicode character
+                    readerIndex += 1
+                    guard readerIndex + 3 < byteLength else {
                         throw UTF8ParsingError()
                     }
+                    let unicode = try decodeUnicode(
+                        from: (
+                            source[readerIndex],
+                            source[readerIndex + 1],
+                            source[readerIndex + 2],
+                            source[readerIndex + 3]
+                        )
+                    )
+                    
+                    unicodes.append(unicode)
+                    readerIndex += 4
 
-                    // 'flush' the accumulated `unicodes` to the buffer
-                    flushUnicodes()
-
+                    // Continue explicitly, so that we do not trigger the unicode 'flush' flow
                     continue next
-                } else {
-                    // End of unicodes, flush them
-                    flushUnicodes()
+                }
 
+                flushUnicodes()
+
+                switch source[readerIndex] {
+                case .backslash, .solidus, .quote:
+                    buffer[writerIndex] = source[readerIndex]
+                    writerIndex += 1
                     // Move past this character
-                    i = i &+ 1
+                    readerIndex += 1
+                case .t:
+                    buffer[writerIndex] = .tab
+                    writerIndex += 1
+                    // Move past this character
+                    readerIndex += 1
+                case .r:
+                    buffer[writerIndex] = .carriageReturn
+                    writerIndex += 1
+                    // Move past this character
+                    readerIndex += 1
+                case .n:
+                    buffer[writerIndex] = .newLine
+                    writerIndex += 1
+                    // Move past this character
+                    readerIndex += 1
+                case .f:
+                    buffer[writerIndex] = .formFeed
+                    writerIndex += 1
+                    // Move past this character
+                    readerIndex += 1
+                case .b:
+                    buffer[writerIndex] = .backspace
+                    writerIndex += 1
+                    // Move past this character
+                    readerIndex += 1
+                default:
+                    throw UTF8ParsingError()
                 }
             }
 
-            // End of string, flush unicode
             flushUnicodes()
+            
+            // Strip off the trailing bytes
+            buffer = UnsafeMutableBufferPointer(start: buffer.baseAddress!, count: writerIndex)
+            return try body(&buffer)
         }
-
-        return data
     }
 }
 
@@ -156,20 +179,14 @@ extension JSONToken.Number {
 
 public struct UTF8ParsingError: Error {}
 
-fileprivate func decodeUnicode<Collection: RangeReplaceableCollection<UInt8>>(
-    from data: inout Collection,
-    offset: inout Int
-) throws -> UInt16 where Collection.Index == Int {
-    let hexCharacters = 4
-    guard data.count - offset >= hexCharacters else {
-        throw UTF8ParsingError()
-    }
-
+fileprivate func decodeUnicode(
+    from bytes: (UInt8, UInt8, UInt8, UInt8)
+) throws -> UInt16 {
     guard
-        let hex0 = data.remove(at: offset).decodeHex(),
-        let hex1 = data.remove(at: offset).decodeHex(),
-        let hex2 = data.remove(at: offset).decodeHex(),
-        let hex3 = data.remove(at: offset).decodeHex()
+        let hex0 = bytes.0.decodeHex(),
+        let hex1 = bytes.1.decodeHex(),
+        let hex2 = bytes.2.decodeHex(),
+        let hex3 = bytes.3.decodeHex()
     else {
         throw UTF8ParsingError()
     }

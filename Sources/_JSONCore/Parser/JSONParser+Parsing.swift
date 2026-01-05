@@ -2,8 +2,10 @@
 
 extension JSONTokenizer {
     /// Scans a JSON object and parses values within it
+    @_optimize(speed)
+    @usableFromInline
     internal mutating func scanArray() throws(JSONParserError) {
-        assert(pointer.pointee == .squareLeft, "An array was scanned but the first byte was not `[`")
+        assert(currentByte == .squareLeft, "An array was scanned but the first byte was not `[`")
         
         // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
@@ -22,7 +24,7 @@ extension JSONTokenizer {
             try skipWhitespace()
             
             // Check for end of array or comma
-            if pointer.pointee == .squareRight {
+            if currentByte == .squareRight {
                 // End of array
                 advance(1)
                 
@@ -36,7 +38,7 @@ extension JSONTokenizer {
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON
                 // Commas are required between each element
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedComma)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedComma)
             } else {
                 // Parsed a comma, always override didParseFirstValue
                 // Overwriting this in the stack is not heavier than an if statement
@@ -54,8 +56,10 @@ extension JSONTokenizer {
     }
     
     /// Scans a JSON object and parses keys and values within it
+    @_optimize(speed)
+    @usableFromInline
     internal mutating func scanObject() throws(JSONParserError) {
-        assert(pointer.pointee == .curlyLeft, "An object was scanned but the first byte was not `{`")
+        assert(currentByte == .curlyLeft, "An object was scanned but the first byte was not `{`")
         
         // Used to keep track if a comma needs to be parsed before the next value
         var didParseFirstValue = false
@@ -72,7 +76,7 @@ extension JSONTokenizer {
         repeat {
             try skipWhitespace()
             
-            if pointer.pointee == .curlyRight {
+            if currentByte == .curlyRight {
                 // End of object
                 advance(1)
                 
@@ -87,7 +91,7 @@ extension JSONTokenizer {
             } else if didParseFirstValue, nextByte() != .comma {
                 // No comma here means this is invalid JSON because a value was already parsed
                 // Commas are required between each element
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedComma)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedComma)
             } else {
                 // Parsed a comma, always override didParseFirstValue
                 // Overwriting this in the stack is not heavier than an if statement
@@ -99,7 +103,7 @@ extension JSONTokenizer {
             try skipWhitespace()
             
             guard nextByte() == .colon else {
-                throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedColon)
+                throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedColon)
             }
             
             try skipWhitespace()
@@ -112,6 +116,8 @@ extension JSONTokenizer {
     }
     
     /// Scans _any_ value and calls into the destination
+    @_optimize(speed)
+    @inlinable
     public mutating func scanValue() throws(JSONParserError) {
         guard hasMoreData else {
             throw JSONParserError.missingData(line: line, column: column)
@@ -119,7 +125,7 @@ extension JSONTokenizer {
         
         try skipWhitespace()
         
-        switch pointer.pointee {
+        switch currentByte {
         case .quote:
             try scanStringLiteral()
         case .curlyLeft:
@@ -131,7 +137,7 @@ extension JSONTokenizer {
                 throw JSONParserError.missingData(line: line, column: column)
             }
             
-            guard pointer[1] == .a, pointer[2] == .l, pointer[3] == .s, pointer[4] == .e else {
+            guard self[1] == .a, self[2] == .l, self[3] == .s, self[4] == .e else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -142,7 +148,7 @@ extension JSONTokenizer {
                 throw JSONParserError.missingData(line: line, column: column)
             }
             
-            guard pointer[1] == .r, pointer[2] == .u, pointer[3] == .e else {
+            guard self[1] == .r, self[2] == .u, self[3] == .e else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -153,7 +159,7 @@ extension JSONTokenizer {
                 throw JSONParserError.missingData(line: line, column: column)
             }
             
-            guard pointer[1] == .u, pointer[2] == .l, pointer[3] == .l else {
+            guard self[1] == .u, self[2] == .l, self[3] == .l else {
                 throw JSONParserError.invalidLiteral(line: line, column: column)
             }
             
@@ -162,13 +168,15 @@ extension JSONTokenizer {
         case .zero ... .nine, .minus:// Numerical
             try scanNumber()
         default:
-            throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedValue)
+            throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedValue)
         }
     }
     
     /// Gets the next byte and advances by 1, doesn't boundary check
-    fileprivate mutating func nextByte() -> UInt8 {
-        let byte = pointer.pointee
+    @_optimize(speed)
+    @usableFromInline
+    mutating func nextByte() -> UInt8 {
+        let byte = currentByte
         self.advance(1)
         return byte
     }
@@ -176,13 +184,15 @@ extension JSONTokenizer {
     /// Scans a number literal, be it double or integer, and calls into the destination
     ///
     /// Integers are simpler to parse, so a different parsing strategy may be sed for performance
-    fileprivate mutating func scanNumber() throws(JSONParserError) {
+    @_optimize(speed)
+    @usableFromInline
+    mutating func scanNumber() throws(JSONParserError) {
         var byteLength = 1
         var floating = false
         
         /// We don't parse/copy the integer out yet
         loop: while byteLength < count {
-            let byte = pointer[byteLength]
+            let byte = self[byteLength]
             
             if byte < .zero || byte > .nine {
                 if byte != .fullStop, byte != .e, byte != .E, byte != .plus, byte != .minus {
@@ -210,9 +220,11 @@ extension JSONTokenizer {
     /// Scans a String literal at the current offset and calls into the destination. Used for values as well as object keys
     ///
     /// We don't copy the String out here, this saves performance in many areas
-    fileprivate mutating func scanStringLiteral() throws(JSONParserError) {
-        if pointer.pointee != .quote {
-            throw JSONParserError.unexpectedToken(line: line, column: column, token: pointer.pointee, reason: .expectedObjectKey)
+    @_optimize(speed)
+    @usableFromInline
+    mutating func scanStringLiteral() throws(JSONParserError) {
+        if currentByte != .quote {
+            throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedObjectKey)
         }
         
         // The offset is calculated and written later, updating the offset too much results in performance loss
@@ -226,7 +238,7 @@ extension JSONTokenizer {
         while currentIndex < count {
             defer { currentIndex = currentIndex &+ 1 }
             
-            let byte = pointer[currentIndex]
+            let byte = self[currentIndex]
             
             // If it's a quote, check if it's escaped
             if byte == .quote {
@@ -240,7 +252,7 @@ extension JSONTokenizer {
                     escapeLoop: while backwardsOffset >= 1 {
                         defer { backwardsOffset = backwardsOffset &- 1 }
                         
-                        if pointer[backwardsOffset] == .backslash {
+                        if self[backwardsOffset] == .backslash {
                             // TODO: Is this the fastest way?
                             // An integer incrementing that `& 1 == 1` is also escaped, likely more solutions
                             escaped = !escaped

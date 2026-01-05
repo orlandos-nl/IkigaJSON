@@ -9,6 +9,57 @@ let isoDateFormatter: DateFormatter = {
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
     return formatter
 }()
+
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+struct InlineBuffer<let size: Int, Element: Sendable>: Sendable {
+    private(set) var storage: InlineArray<size, Element>
+    private(set) var count: Int
+    var isEmpty: Bool { count == 0 }
+
+    subscript(index: Int) -> Element {
+        get {
+            precondition(index >= 0 && index < size, "Index out of bounds")
+            return storage[index]
+        }
+        set {
+            precondition(index >= 0 && index < size, "Index out of bounds")
+            storage[index] = newValue
+        }
+    }
+
+    mutating func append(_ element: Element) {
+        precondition(count < size, "Coding path is full")
+        self[count] = element
+        count += 1
+    }
+
+    init(repeating element: Element) {
+        self.storage = .init(repeating: element)
+        self.count = 0
+    }
+}
+
+fileprivate struct StubCodingKey: CodingKey {
+    var stringValue: String { preconditionFailure() }
+    var intValue: Int? { preconditionFailure() }
+    init() {}
+    init?(stringValue: String) {
+        preconditionFailure()
+    }
+    init?(intValue: Int) {
+        preconditionFailure()
+    }
+}
+
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+extension InlineBuffer where Element == any CodingKey {
+    init() {
+        self.storage = .init(repeating: StubCodingKey())
+        self.count = 0
+    }
+}
+#endif
     
 func date(from string: String) throws -> Date {
     if #available(OSX 10.12, iOS 11, *) {
@@ -66,13 +117,35 @@ public struct JSONDecoderSettings: @unchecked Sendable {
     public var dataDecodingStrategy = JSONDecoder.DataDecodingStrategy.base64
 }
 
+fileprivate struct LockedJSONDescription: @unchecked Sendable {
+    private let description: JSONDescription
+    private let lock: NSLock
+    
+    init() {
+        self.description = JSONDescription()
+        self.lock = NSLock()
+    }
+
+    func withDescription<T>(_ body: (JSONDescription) throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        description.reset()
+        return try body(description)
+    }
+}
+
 /// A JSON Decoder that aims to be largely functionally equivalent to Foundation.JSONDecoder with more for optimization.
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 public struct IkigaJSONDecoder: Sendable {
     /// These settings can be used to alter the decoding process.
     public var settings: JSONDecoderSettings
+    private let description: LockedJSONDescription
 
     public init(settings: JSONDecoderSettings = JSONDecoderSettings()) {
         self.settings = settings
+        self.description = LockedJSONDescription()
     }
     
     /// Parses the Decodable type from an UnsafeBufferPointer.
@@ -83,22 +156,22 @@ public struct IkigaJSONDecoder: Sendable {
     }
 
     public func _decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws -> (element: D, parsed: Int) {
-        let pointer = buffer.baseAddress!
-        var parser = JSONTokenizer(
-            pointer: pointer,
-            count: buffer.count,
-            destination: JSONDescription()
-        )
-        try parser.scanValue()
+        try description.withDescription { description in
+            var parser = JSONTokenizer(
+                bytes: buffer,
+                destination: description
+            )
+            try parser.scanValue()
 
-        let decoder = _JSONDecoder(
-            description: parser.destination,
-            codingPath: [],
-            pointer: pointer,
-            settings: settings
-        )
-        let type = try D(from: decoder)
-        return (type, parser.currentOffset)
+            let decoder = _JSONDecoder(
+                description: parser.destination.unsafeReadOnlySubDescription(offset: 0),
+                codingPath: .init(),
+                pointer: buffer.baseAddress!,
+                settings: settings
+            )
+            let type = try D(from: decoder)
+            return (type, parser.currentOffset)
+        }
     }
 
     /// Parses the Decodable type from `Data`. This is the equivalent for JSONDecoder's Decode function.
@@ -112,8 +185,8 @@ public struct IkigaJSONDecoder: Sendable {
     public func decode<D: Decodable>(_ type: D.Type, from object: JSONObject) throws -> D {
         return try object.jsonBuffer.withUnsafeReadableBytes { buffer in
             let decoder = _JSONDecoder(
-                description: object.jsonDescription,
-                codingPath: [],
+                description: object.jsonDescription.unsafeReadOnlySubDescription(offset: 0),
+                codingPath: .init(),
                 pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
                 settings: settings
             )
@@ -126,8 +199,8 @@ public struct IkigaJSONDecoder: Sendable {
     public func decode<D: Decodable>(_ type: D.Type, from array: JSONArray) throws -> D {
         return try array.jsonBuffer.withUnsafeReadableBytes { buffer in
             let decoder = _JSONDecoder(
-                description: array.jsonDescription,
-                codingPath: [],
+                description: array.jsonDescription.unsafeReadOnlySubDescription(offset: 0),
+                codingPath: .init(),
                 pointer: buffer.baseAddress!.bindMemory(to: UInt8.self, capacity: buffer.count),
                 settings: settings
             )
@@ -179,45 +252,68 @@ public struct IkigaJSONDecoder: Sendable {
         from buffer: inout ByteBuffer,
         settings: JSONDecoderSettings = JSONDecoderSettings()
     ) throws -> D {
-        return try buffer.readWithUnsafeMutableReadableBytes { buffer -> (Int, D) in
-            let buffer = buffer.bindMemory(to: UInt8.self)
-            let pointer = buffer.baseAddress!
-            var parser = JSONTokenizer(
-                pointer: pointer,
-                count: buffer.count,
-                destination: JSONDescription()
-            )
-            try parser.scanValue()
-            
-            let decoder = _JSONDecoder(
-                description: parser.destination,
-                codingPath: [],
-                pointer: pointer,
-                settings: settings
-            )
-            let type = try D(from: decoder)
-            return (parser.currentOffset, type)
+        return try description.withDescription { description in
+            return try buffer.readWithUnsafeMutableReadableBytes { buffer -> (Int, D) in
+                let buffer = buffer.bindMemory(to: UInt8.self)
+                var parser = JSONTokenizer(
+                    bytes: UnsafeBufferPointer(buffer),
+                    destination: description
+                )
+                try parser.scanValue()
+                
+                let decoder = _JSONDecoder(
+                    description: parser.destination.unsafeReadOnlySubDescription(offset: 0),
+                    codingPath: .init(),
+                    pointer: buffer.baseAddress!,
+                    settings: settings
+                )
+                let type = try D(from: decoder)
+                return (parser.currentOffset, type)
+            }
         }
     }
     
     internal func decode<D: Decodable>(
         _ type: D.Type,
         from buffer: UnsafeBufferPointer<UInt8>,
-        description: JSONDescription,
+        description: JSONDescriptionView,
         settings: JSONDecoderSettings = JSONDecoderSettings()
     ) throws -> D {
-        let decoder = _JSONDecoder(description: description, codingPath: [], pointer: buffer.baseAddress!, settings: settings)
+        let decoder = _JSONDecoder(description: description, codingPath: .init(), pointer: buffer.baseAddress!, settings: settings)
         return try D(from: decoder)
     }
 }
 
-fileprivate struct _JSONDecoder: Decoder {
-    let description: JSONDescription
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
+fileprivate final class _JSONDecoder: Decoder {
+    let description: JSONDescriptionView
     let pointer: UnsafePointer<UInt8>
     let settings: JSONDecoderSettings
     var snakeCasing: Bool
     
-    var codingPath: [CodingKey]
+    #if swift(>=6.2.1) && Spans
+    typealias CodingPath = InlineBuffer<32, any CodingKey>
+    var _codingPath: CodingPath
+    var codingPath: [any CodingKey] {
+        var array = [any CodingKey]()
+        array.reserveCapacity(CodingPath.size)
+        for index in 0..<32 {
+            array.append(_codingPath[index])
+        }
+        return array
+    }
+    #else
+    typealias CodingPath = [any CodingKey]
+    var _codingPath: [any CodingKey]
+
+    @usableFromInline
+    var codingPath: [any CodingKey] {
+        return _codingPath
+    }
+    #endif
+
     var userInfo: [CodingUserInfoKey : Any] {
         return settings.userInfo
     }
@@ -251,10 +347,10 @@ fileprivate struct _JSONDecoder: Decoder {
         return SingleValueJSONDecodingContainer(decoder: self)
     }
     
-    init(description: JSONDescription, codingPath: [CodingKey], pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
+    init(description: JSONDescriptionView, codingPath: CodingPath, pointer: UnsafePointer<UInt8>, settings: JSONDecoderSettings) {
         self.description = description
         self.pointer = pointer
-        self.codingPath = codingPath
+        self._codingPath = codingPath
         self.settings = settings
         
         if case .convertFromSnakeCase = settings.keyDecodingStrategy {
@@ -266,7 +362,7 @@ fileprivate struct _JSONDecoder: Decoder {
     
     func subDecoder(offsetBy offset: Int) -> _JSONDecoder {
         let subDescription = self.description.unsafeReadOnlySubDescription(offset: offset)
-        return _JSONDecoder(description: subDescription, codingPath: codingPath, pointer: pointer, settings: settings)
+        return _JSONDecoder(description: subDescription, codingPath: _codingPath, pointer: pointer, settings: settings)
     }
     
     func decode<D: Decodable>(_ type: D.Type) throws -> D {
@@ -336,6 +432,9 @@ fileprivate struct _JSONDecoder: Decoder {
     }
 }
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     var codingPath: [CodingKey] { decoder.codingPath }
     var allKeys: [Key] { allStringKeys.compactMap(Key.init) }
@@ -487,8 +586,8 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         ) else {
             throw failureError
         }
-        var subDecoder = self.decoder.subDecoder(offsetBy: offset)
-        subDecoder.codingPath.append(key)
+        let subDecoder = self.decoder.subDecoder(offsetBy: offset)
+        subDecoder._codingPath.append(key)
         return subDecoder
     }
     
@@ -517,6 +616,9 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
     }
 }
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     let decoder: _JSONDecoder
     private var offset = 17 // Array descriptions are 17 bytes
@@ -666,7 +768,8 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     mutating func decode(_ type: UInt16.Type) throws -> UInt16 { return try decodeInt(type) }
     mutating func decode(_ type: UInt32.Type) throws -> UInt32 { return try decodeInt(type) }
     mutating func decode(_ type: UInt64.Type) throws -> UInt64 { return try decodeInt(type) }
-    mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable { let decoder = self.decoder.subDecoder(offsetBy: offset)
+    mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
+        let decoder = self.decoder.subDecoder(offsetBy: offset)
         skipValue()
         return try decoder.decode(type)
     }
@@ -690,6 +793,9 @@ fileprivate struct UnkeyedJSONDecodingContainer: UnkeyedDecodingContainer {
     }
 }
 
+#if swift(>=6.2.1) && Spans
+@available(macOS 26, iOS 26, watchOS 26, tvOS 26, visionOS 26, *)
+#endif
 fileprivate struct SingleValueJSONDecodingContainer: SingleValueDecodingContainer {
     var codingPath: [CodingKey] { decoder.codingPath }
     let decoder: _JSONDecoder
