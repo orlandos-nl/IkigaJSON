@@ -279,6 +279,9 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable, CustomS
             return number.makeDouble(from: json)
         case .null:
             return NSNull()
+        case .objectKey, .objectKeyWithEscaping:
+            // Object keys should not appear in arrays, but handle gracefully
+            fatalError("Unexpected objectKey type in JSON array")
         }
     }
 

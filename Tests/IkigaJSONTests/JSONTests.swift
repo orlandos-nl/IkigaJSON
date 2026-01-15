@@ -1617,4 +1617,153 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo3":0}"#)))
         XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0}"#)))
     }
+
+    /// Test for lastKeySearchHint not being reset in nested objects.
+    /// This test demonstrates a potential optimization inefficiency where subDecoders inherit
+    /// the parent's lastKeySearchHint, which points to an invalid offset in the child's context.
+    ///
+    /// The issue occurs in the subDecoder(offsetBy:) method which doesn't reset lastKeySearchHint.
+    /// When a parent decoder has accessed several keys sequentially (setting lastKeySearchHint
+    /// to point after the last accessed key), and then creates a sub-decoder for a nested object,
+    /// the child decoder inherits this hint value. This hint points to an offset in the parent's
+    /// index space, which is invalid for the child's index space.
+    ///
+    /// While the current implementation has wraparound logic that prevents incorrect results,
+    /// the inherited hint causes unnecessary wraparound searches, reducing the efficiency
+    /// of the sequential access optimization.
+    func testNestedObjectKeyLookupHintReset() throws {
+        struct Parent: Codable, Equatable {
+            let firstKey: String
+            let secondKey: String
+            let thirdKey: String
+            let nested: Nested
+            let fourthKey: String
+            
+            struct Nested: Codable, Equatable {
+                let nestedFirstKey: String
+                let nestedSecondKey: String
+                let nestedThirdKey: String
+            }
+        }
+        
+        // Create a JSON with nested objects where the parent has multiple keys
+        // before the nested object, setting up the lastKeySearchHint
+        let json = """
+        {
+            "firstKey": "value1",
+            "secondKey": "value2",
+            "thirdKey": "value3",
+            "nested": {
+                "nestedFirstKey": "nestedValue1",
+                "nestedSecondKey": "nestedValue2",
+                "nestedThirdKey": "nestedValue3"
+            },
+            "fourthKey": "value4"
+        }
+        """.data(using: .utf8)!
+        
+        let expected = Parent(
+            firstKey: "value1",
+            secondKey: "value2",
+            thirdKey: "value3",
+            nested: Parent.Nested(
+                nestedFirstKey: "nestedValue1",
+                nestedSecondKey: "nestedValue2",
+                nestedThirdKey: "nestedValue3"
+            ),
+            fourthKey: "value4"
+        )
+        
+        let decoder = IkigaJSONDecoder()
+        let result = try decoder.decode(Parent.self, from: json)
+        
+        // Verifies correct decoding despite optimization inefficiency.
+        // The nested decoder ideally should start with hint = Constants.firstArrayObjectChildOffset (17),
+        // rather than inheriting the parent's hint which points to an offset in the parent's context.
+        XCTAssertEqual(result, expected)
+        
+        // Test with deeply nested structures to further verify the behavior
+        struct DeeplyNested: Codable, Equatable {
+            let a: String
+            let b: String
+            let level1: Level1
+            
+            struct Level1: Codable, Equatable {
+                let c: String
+                let d: String
+                let level2: Level2
+                
+                struct Level2: Codable, Equatable {
+                    let e: String
+                    let f: String
+                    let level3: Level3
+                    
+                    struct Level3: Codable, Equatable {
+                        let g: String
+                        let h: String
+                    }
+                }
+            }
+        }
+        
+        let deeplyNestedJson = """
+        {
+            "a": "value_a",
+            "b": "value_b",
+            "level1": {
+                "c": "value_c",
+                "d": "value_d",
+                "level2": {
+                    "e": "value_e",
+                    "f": "value_f",
+                    "level3": {
+                        "g": "value_g",
+                        "h": "value_h"
+                    }
+                }
+            }
+        }
+        """.data(using: .utf8)!
+        
+        let expectedDeep = DeeplyNested(
+            a: "value_a",
+            b: "value_b",
+            level1: DeeplyNested.Level1(
+                c: "value_c",
+                d: "value_d",
+                level2: DeeplyNested.Level1.Level2(
+                    e: "value_e",
+                    f: "value_f",
+                    level3: DeeplyNested.Level1.Level2.Level3(
+                        g: "value_g",
+                        h: "value_h"
+                    )
+                )
+            )
+        )
+        
+        let resultDeep = try decoder.decode(DeeplyNested.self, from: deeplyNestedJson)
+        
+        // Verifies correct decoding with deeply nested structures.
+        // Each nested level inherits the parent's hint, potentially causing
+        // progressively less optimal lookups as we go deeper.
+        XCTAssertEqual(resultDeep, expectedDeep)
+    }
+    
+    func testEmptyObjectKey() throws {
+        // Regression test for empty keys (keyLength = 0): the hash computation loop uses
+        // a range like 1..<(keyLength + 1), which becomes 1..<1 (a valid empty range).
+        // This guards against changes that might introduce an invalid range (e.g. 1...keyLength)
+        // and ensures the parser correctly handles empty object keys.
+        let json = """
+        {"": "value"}
+        """.data(using: .utf8)!
+        
+        // This should not crash with "Fatal error: Can't form Range with upperBound < lowerBound"
+        XCTAssertNoThrow(try JSONObject(data: json))
+        
+        // Verify the object can be decoded and contains the empty key
+        let object = try JSONObject(data: json)
+        XCTAssertEqual(object[""] as? String, "value")
+    }
 }
