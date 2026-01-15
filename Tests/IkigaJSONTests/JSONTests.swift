@@ -1749,4 +1749,19 @@ final class IkigaJSONTests: XCTestCase {
         // progressively less optimal lookups as we go deeper.
         XCTAssertEqual(resultDeep, expectedDeep)
     }
+    
+    func testEmptyObjectKey() throws {
+        // Test case for potential bug: empty keys (keyLength = 0) cause invalid range 1...0
+        // This tests the hash computation loop in JSONParser+Parsing.swift line 331
+        let json = """
+        {"": "value"}
+        """.data(using: .utf8)!
+        
+        // This should not crash with "Fatal error: Can't form Range with upperBound < lowerBound"
+        XCTAssertNoThrow(try JSONObject(data: json))
+        
+        // Verify the object can be decoded and contains the empty key
+        let object = try JSONObject(data: json)
+        XCTAssertEqual(object[""] as? String, "value")
+    }
 }
