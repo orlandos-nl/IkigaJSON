@@ -15,7 +15,17 @@ enum Constants {
     /// typeByte + Int + Int
     @usableFromInline
     static let stringNumberIndexLength = 9
-    
+
+    /// Type byte + JSON location + JSON length + Hash
+    ///
+    /// typeByte + Int32 + Int32 + UInt32
+    @usableFromInline
+    static let objectKeyIndexLength = 13
+
+    /// Offset within object key index where hash is stored
+    @usableFromInline
+    static let objectKeyHashOffset = 9
+
     /// Type byte + JSON location
     ///
     /// typeByte + Int

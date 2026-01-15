@@ -14,7 +14,12 @@ let package = Package(
         .library(
             name: "IkigaJSON",
             targets: ["IkigaJSON"]
-        )
+        ),
+        // Embedded Swift compatible library - no Foundation or NIO dependencies
+        .library(
+            name: "IkigaJSONCore",
+            targets: ["_JSONCore"]
+        ),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -24,7 +29,11 @@ let package = Package(
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages which this package depends on.
         .target(
-            name: "_JSONCore"
+            name: "_JSONCore",
+            swiftSettings: [
+                // Enable strict concurrency for Embedded Swift compatibility
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
         ),
         .target(
             name: "_NIOJSON",

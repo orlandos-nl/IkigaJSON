@@ -99,7 +99,7 @@ extension JSONTokenizer {
             }
             
             try skipWhitespace() // needed because of the comma
-            try scanStringLiteral()
+            try scanObjectKey()
             try skipWhitespace()
             
             guard nextByte() == .colon else {
@@ -278,6 +278,69 @@ extension JSONTokenizer {
             }
         }
         
+        throw JSONParserError.missingData(line: line, column: column)
+    }
+
+    /// Scans an object key (string) and computes its hash for fast lookup
+    @_optimize(speed)
+    @inlinable
+    mutating func scanObjectKey() throws(JSONParserError) {
+        if currentByte != .quote {
+            throw JSONParserError.unexpectedToken(line: line, column: column, token: currentByte, reason: .expectedObjectKey)
+        }
+
+        var currentIndex: Int = 1
+        var didEscape = false
+        defer { advance(currentIndex) }
+
+        while currentIndex < count {
+            defer { currentIndex = currentIndex &+ 1 }
+
+            let byte = self[currentIndex]
+
+            if byte == .quote {
+                var escaped = false
+
+                if didEscape {
+                    var backwardsOffset = currentIndex &- 1
+
+                    escapeLoop: while backwardsOffset >= 1 {
+                        defer { backwardsOffset = backwardsOffset &- 1 }
+
+                        if self[backwardsOffset] == .backslash {
+                            escaped = !escaped
+                        } else {
+                            break escapeLoop
+                        }
+                    }
+                }
+
+                if !escaped {
+                    let start = JSONSourcePosition(byteIndex: currentOffset)
+                    let stringToken = JSONToken.String(
+                        start: start,
+                        byteLength: currentIndex &+ 1,
+                        usesEscaping: didEscape
+                    )
+
+                    // Compute hash of key bytes (excluding quotes)
+                    // Key content starts at offset 1 (after opening quote)
+                    // Key length is currentIndex - 1 (excluding opening quote, currentIndex points to closing quote)
+                    let keyLength = currentIndex - 1
+                    var hash: UInt32 = 2166136261  // FNV offset basis
+                    for i in 1...keyLength {
+                        hash ^= UInt32(self[i])
+                        hash &*= 16777619  // FNV prime
+                    }
+
+                    destination.objectKeyFound(stringToken, hash: hash)
+                    return
+                }
+            } else if byte == .backslash {
+                didEscape = true
+            }
+        }
+
         throw JSONParserError.missingData(line: line, column: column)
     }
 }

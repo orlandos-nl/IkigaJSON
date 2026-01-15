@@ -13,6 +13,17 @@ public protocol JSONTokenizerDestination {
     mutating func nullFound(_ null: JSONToken.Null)
     mutating func stringFound(_ string: JSONToken.String)
     mutating func numberFound(_ number: JSONToken.Number)
+
+    /// Called when an object key is found, with a pre-computed hash of the key bytes.
+    /// Default implementation calls `stringFound()` for backward compatibility.
+    mutating func objectKeyFound(_ string: JSONToken.String, hash: UInt32)
+}
+
+extension JSONTokenizerDestination {
+    @inlinable
+    public mutating func objectKeyFound(_ string: JSONToken.String, hash: UInt32) {
+        stringFound(string)
+    }
 }
 
 public enum JSONToken: Sendable, Hashable {

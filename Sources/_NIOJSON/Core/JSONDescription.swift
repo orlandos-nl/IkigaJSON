@@ -2,6 +2,19 @@ import Foundation
 import NIOCore
 import _JSONCore
 
+/// FNV-1a hash function for key hashing (32-bit)
+/// Used to compare search keys against pre-computed hashes in the index
+@inline(__always)
+@usableFromInline
+internal func fnv1aHashString(_ bytes: UnsafeBufferPointer<UInt8>) -> UInt32 {
+    var hash: UInt32 = 2166136261  // FNV offset basis
+    for byte in bytes {
+        hash ^= UInt32(byte)
+        hash &*= 16777619  // FNV prime
+    }
+    return hash
+}
+
 package protocol JSONDescriptionProtocol {
     var pointer: UnsafeMutableRawBufferPointer { get }
     var writtenBytes: Int { get }
@@ -156,6 +169,11 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
     @inlinable
     public func stringFound(_ string: JSONToken.String) {
         describeString(string)
+    }
+
+    @inlinable
+    public func objectKeyFound(_ string: JSONToken.String, hash: UInt32) {
+        describeObjectKey(string, hash: hash)
     }
 
     @inlinable
@@ -349,7 +367,7 @@ extension JSONDescriptionProtocol {
             ) else {
                 fatalError("The JSON index is corrupt. No IndexLength could be found for all children of an object or array. Please file a bug report on Github.")
             }
-            
+
             assert(childrenLength <= Int32(writtenBytes))
             return Constants.arrayObjectIndexLength + Int(childrenLength)
         case .boolTrue, .boolFalse, .null:
@@ -357,6 +375,8 @@ extension JSONDescriptionProtocol {
             return Constants.boolNullIndexLength
         case .string, .stringWithEscaping, .integer, .floatingNumber:
             return Constants.stringNumberIndexLength
+        case .objectKey, .objectKeyWithEscaping:
+            return Constants.objectKeyIndexLength
         }
     }
     
@@ -662,6 +682,18 @@ extension JSONDescription {
         writeInteger(Int32(string.start.byteOffset))
         writeInteger(Int32(string.byteLength))
     }
+
+    /// Describes an object key with pre-computed hash for fast lookup
+    /// Layout: [type: UInt8][offset: Int32][length: Int32][hash: UInt32] = 13 bytes
+    @inlinable
+    func describeObjectKey(_ string: JSONToken.String, hash: UInt32) {
+        let type: JSONType = string.usesEscaping ? .objectKeyWithEscaping : .objectKey
+
+        writeInteger(type.rawValue)
+        writeInteger(Int32(string.start.byteOffset))
+        writeInteger(Int32(string.byteLength))
+        writeInteger(hash)
+    }
     
     @inlinable
     func describeNumber(_ number: JSONToken.Number) {
@@ -861,12 +893,9 @@ extension JSONDescriptionProtocol {
     func keyOffset(
         forKey key: String,
         convertingSnakeCasing: Bool,
-        in json: UnsafePointer<UInt8>
+        in json: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> (index: Int, offset: Int)? {
-        // Object index
-        var index = 0
-        var offset = Constants.firstArrayObjectChildOffset
-        
         guard
             let count: Int32 = self.getInteger(
                 at: Constants.arrayObjectPairCountOffset
@@ -879,30 +908,102 @@ extension JSONDescriptionProtocol {
         var key = key
         return key.withUTF8 { key in
             let keySize = key.count
+            // Compute hash of search key once
+            let searchHash = fnv1aHashString(key)
 
-            for _ in 0..<count {
-                // Fetch the bounds for the key in JSON
+            // Use hint directly as the starting offset if it's valid (within bounds)
+            let validHint = hint >= Constants.firstArrayObjectChildOffset && hint < writtenBytes
+            let startOffset = validHint ? hint : Constants.firstArrayObjectChildOffset
+
+            // Search from hint to end
+            var index = 0
+            var offset = startOffset
+            var searched = 0
+
+            // First pass: from hint to end
+            while offset < writtenBytes && searched < count {
+                let keyType = self.type(atOffset: offset)
                 let bounds = dataBounds(atIndexOffset: offset)
 
-                // Does the key match our search?
-                if !convertingSnakeCasing, bounds.length == keySize, memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
-                    return (index, offset)
-                } else if convertingSnakeCasing, snakeCasedEqual(
-                    codingKey: key,
-                    snakeCasedKey: UnsafeBufferPointer(
-                        start: json + Int(bounds.offset),
-                        count: Int(bounds.length)
-                    )
-                ) {
-                    return (index, offset)
+                // For snake case conversion, we can't use hash optimization because
+                // the stored hash is for the raw key (e.g., "user_name") but we're
+                // searching with the converted key (e.g., "userName")
+                if convertingSnakeCasing {
+                    if snakeCasedEqual(
+                        codingKey: key,
+                        snakeCasedKey: UnsafeBufferPointer(
+                            start: json + Int(bounds.offset),
+                            count: Int(bounds.length)
+                        )
+                    ) {
+                        return (index, offset)
+                    }
+                } else if bounds.length == keySize {
+                    // Quick length check first - most common rejection path
+                    // For object keys with hash, use hash comparison to skip mismatches
+                    if keyType == .objectKey || keyType == .objectKeyWithEscaping {
+                        let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset) ?? 0
+                        // Only do memcmp if hashes match (fast reject on mismatch)
+                        if storedHash == searchHash {
+                            if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
+                                return (index, offset)
+                            }
+                        }
+                        // Hash mismatch - skip this key (no memcmp needed!)
+                    } else {
+                        // Legacy string key - no hash, must use memcmp
+                        if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
+                            return (index, offset)
+                        }
+                    }
                 }
 
-                // Skip key
-                skipIndex(atOffset: &offset)
+                skipIndex(atOffset: &offset) // Skip key
+                skipIndex(atOffset: &offset) // Skip value
+                index += 1
+                searched += 1
+            }
 
-                // Skip value
-                skipIndex(atOffset: &offset)
-                index = index &+ 1
+            // Wrap around: search from beginning to hint
+            if validHint && startOffset > Constants.firstArrayObjectChildOffset {
+                offset = Constants.firstArrayObjectChildOffset
+                index = 0
+
+                while offset < startOffset && searched < count {
+                    let keyType = self.type(atOffset: offset)
+                    let bounds = dataBounds(atIndexOffset: offset)
+
+                    // For snake case conversion, we can't use hash optimization
+                    if convertingSnakeCasing {
+                        if snakeCasedEqual(
+                            codingKey: key,
+                            snakeCasedKey: UnsafeBufferPointer(
+                                start: json + Int(bounds.offset),
+                                count: Int(bounds.length)
+                            )
+                        ) {
+                            return (index, offset)
+                        }
+                    } else if bounds.length == keySize {
+                        if keyType == .objectKey || keyType == .objectKeyWithEscaping {
+                            let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset) ?? 0
+                            if storedHash == searchHash {
+                                if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
+                                    return (index, offset)
+                                }
+                            }
+                        } else {
+                            if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
+                                return (index, offset)
+                            }
+                        }
+                    }
+
+                    skipIndex(atOffset: &offset) // Skip key
+                    skipIndex(atOffset: &offset) // Skip value
+                    index += 1
+                    searched += 1
+                }
             }
 
             return nil
@@ -912,17 +1013,18 @@ extension JSONDescriptionProtocol {
     func valueOffset(
         forKey key: String,
         convertingSnakeCasing: Bool,
-        in buffer: UnsafePointer<UInt8>
+        in buffer: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> (index: Int, offset: Int)? {
-        guard let data = keyOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: buffer) else {
+        guard let data = keyOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: buffer, hint: hint) else {
             return nil
         }
-        
+
         let index = data.index
         var offset = data.offset
         // Skip key
         skipIndex(atOffset: &offset)
-        
+
         return (index, offset)
     }
     
@@ -941,12 +1043,13 @@ extension JSONDescriptionProtocol {
     func type(
         ofKey key: String,
         convertingSnakeCasing: Bool,
-        in buffer: UnsafePointer<UInt8>
+        in buffer: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> JSONType? {
-        guard let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: buffer) else {
+        guard let (_, offset) = valueOffset(forKey: key, convertingSnakeCasing: convertingSnakeCasing, in: buffer, hint: hint) else {
             return nil
         }
-        
+
         return self.type(atOffset: offset)
     }
     
@@ -996,7 +1099,7 @@ extension JSONDescriptionProtocol {
     @inlinable
     func dataBounds(atIndexOffset indexOffset: Int) -> (offset: Int32, length: Int32) {
         let jsonOffset = self.jsonOffset(at: indexOffset)
-        
+
         switch self.type(atOffset: indexOffset) {
         case .boolFalse:
             return (
@@ -1008,7 +1111,7 @@ extension JSONDescriptionProtocol {
                 offset: jsonOffset,
                 length: 4
             )
-        case .string, .stringWithEscaping:
+        case .string, .stringWithEscaping, .objectKey, .objectKeyWithEscaping:
             return (
                 offset: jsonOffset &+ 1,
                 length: jsonLength(at: indexOffset) &- 2
@@ -1025,7 +1128,7 @@ extension JSONDescriptionProtocol {
     @inlinable
     func jsonBounds(at indexOffset: Int) -> (offset: Int32, length: Int32) {
         let jsonOffset = self.jsonOffset(at: indexOffset)
-        
+
         switch self.type(atOffset: indexOffset) {
         case .boolFalse:
             return (
@@ -1037,7 +1140,7 @@ extension JSONDescriptionProtocol {
                 offset: jsonOffset,
                 length: 4
             )
-        case .object, .array, .string, .stringWithEscaping, .integer, .floatingNumber:
+        case .object, .array, .string, .stringWithEscaping, .integer, .floatingNumber, .objectKey, .objectKeyWithEscaping:
             return (
                 offset: jsonOffset,
                 length: jsonLength(at: indexOffset)
@@ -1072,21 +1175,23 @@ extension JSONDescriptionProtocol {
     func stringBounds(
         forKey key: String,
         convertingSnakeCasing: Bool,
-        in pointer: UnsafePointer<UInt8>
+        in pointer: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> JSONToken.String? {
         guard
             let (_, offset) = valueOffset(
                 forKey: key,
                 convertingSnakeCasing: convertingSnakeCasing,
-                in: pointer
+                in: pointer,
+                hint: hint
             )
         else {
             return nil
         }
-        
+
         let type = self.type(atOffset: offset)
         guard type == .string || type == .stringWithEscaping else { return nil }
-        
+
         let bounds = dataBounds(atIndexOffset: offset)
         return JSONToken.String(
             start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
@@ -1094,23 +1199,25 @@ extension JSONDescriptionProtocol {
             usesEscaping: type == .stringWithEscaping
         )
     }
-    
+
     @inlinable
     func integerBounds(
         forKey key: String,
         convertingSnakeCasing: Bool,
-        in pointer: UnsafePointer<UInt8>
+        in pointer: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> JSONToken.Number? {
         guard
             let (_, offset) = valueOffset(
                 forKey: key,
                 convertingSnakeCasing: convertingSnakeCasing,
-                in: pointer
+                in: pointer,
+                hint: hint
             )
         else {
             return nil
         }
-        
+
         let type = self.type(atOffset: offset)
         guard type == .integer else { return nil }
 
@@ -1121,23 +1228,25 @@ extension JSONDescriptionProtocol {
             isInteger: true
         )
     }
-    
+
     @inlinable
     func floatingBounds(
         forKey key: String,
         convertingSnakeCasing: Bool,
-        in pointer: UnsafePointer<UInt8>
+        in pointer: UnsafePointer<UInt8>,
+        hint: Int = Constants.firstArrayObjectChildOffset
     ) -> JSONToken.Number? {
         guard
             let (_, offset) = valueOffset(
                 forKey: key,
                 convertingSnakeCasing: convertingSnakeCasing,
-                in: pointer
+                in: pointer,
+                hint: hint
             )
         else {
             return nil
         }
-        
+
         let type = self.type(atOffset: offset)
         guard type == .integer || type == .floatingNumber else { return nil }
 
@@ -1162,6 +1271,9 @@ enum JSONType: UInt8 {
     case integer = 0x07
     case floatingNumber = 0x08
     case null = 0x09
+    /// Object key types include pre-computed hash (13 bytes instead of 9)
+    case objectKey = 0x0A
+    case objectKeyWithEscaping = 0x0B
 
     @inline(__always)
     var indexLength: Int {
@@ -1172,6 +1284,8 @@ enum JSONType: UInt8 {
             return Constants.boolNullIndexLength
         case .integer, .floatingNumber, .string, .stringWithEscaping:
             return Constants.stringNumberIndexLength
+        case .objectKey, .objectKeyWithEscaping:
+            return Constants.objectKeyIndexLength
         }
     }
 }

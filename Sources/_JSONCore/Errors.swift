@@ -114,13 +114,11 @@ public enum JSONParserError: Error, Sendable {
     case unexpectedToken(line: Int, column: Int, token: UInt8, reason: Reason)
 }
 
-public struct TypeConversionError<F: FixedWidthInteger & Sendable>: Error {
-    let from: F
-    let to: Any.Type
+public struct TypeConversionError<F: FixedWidthInteger & Sendable, T>: Error, Sendable {
+    public let from: F
 
-    public init(from: F, to: Any.Type) {
+    public init(from: F, to: T.Type) {
         self.from = from
-        self.to = to
     }
 }
 

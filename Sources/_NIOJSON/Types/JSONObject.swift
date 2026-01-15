@@ -275,6 +275,9 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable, C
             return number.makeDouble(from: json)
         case .null:
             return NSNull()
+        case .objectKey, .objectKeyWithEscaping:
+            // Object keys should not appear as values
+            return nil
         }
     }
     
