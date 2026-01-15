@@ -1618,11 +1618,11 @@ final class IkigaJSONTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0}"#)))
     }
 
-    /// Test for lastKeySearchHint not being reset in nested objects
-    /// This demonstrates the bug where subDecoders inherit the parent's lastKeySearchHint,
-    /// which points to an invalid offset in the child's context.
+    /// Test for lastKeySearchHint not being reset in nested objects.
+    /// This test demonstrates a potential optimization inefficiency where subDecoders inherit
+    /// the parent's lastKeySearchHint, which points to an invalid offset in the child's context.
     ///
-    /// The bug exists in the subDecoder(offsetBy:) method which doesn't reset lastKeySearchHint.
+    /// The issue occurs in the subDecoder(offsetBy:) method which doesn't reset lastKeySearchHint.
     /// When a parent decoder has accessed several keys sequentially (setting lastKeySearchHint
     /// to point after the last accessed key), and then creates a sub-decoder for a nested object,
     /// the child decoder inherits this hint value. This hint points to an offset in the parent's
@@ -1677,13 +1677,12 @@ final class IkigaJSONTests: XCTestCase {
         let decoder = IkigaJSONDecoder()
         let result = try decoder.decode(Parent.self, from: json)
         
-        // The bug doesn't cause incorrect results due to wraparound logic,
-        // but it does cause inefficient lookups. The nested decoder should start
-        // with hint = Constants.firstArrayObjectChildOffset (17), not inherit
-        // the parent's hint which points to an offset in the parent's context.
+        // Verifies correct decoding despite optimization inefficiency.
+        // The nested decoder ideally should start with hint = Constants.firstArrayObjectChildOffset (17),
+        // rather than inheriting the parent's hint which points to an offset in the parent's context.
         XCTAssertEqual(result, expected)
         
-        // Test with deeply nested structures to further demonstrate the issue
+        // Test with deeply nested structures to further verify the behavior
         struct DeeplyNested: Codable, Equatable {
             let a: String
             let b: String
@@ -1745,9 +1744,9 @@ final class IkigaJSONTests: XCTestCase {
         
         let resultDeep = try decoder.decode(DeeplyNested.self, from: deeplyNestedJson)
         
-        // Each nested level inherits the parent's hint, causing progressively
-        // worse hint values as we go deeper. Each level should reset to
-        // Constants.firstArrayObjectChildOffset (17).
+        // Verifies correct decoding with deeply nested structures.
+        // Each nested level inherits the parent's hint, potentially causing
+        // progressively less optimal lookups as we go deeper.
         XCTAssertEqual(resultDeep, expectedDeep)
     }
 }
