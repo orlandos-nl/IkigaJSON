@@ -511,7 +511,7 @@ fileprivate struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingCont
         return valueOffset(forKey: key) != nil
     }
     
-    /// Get the JSON type for a key using O(1) dictionary lookup
+    /// Get the JSON type for a key using an optimized, hash-assisted linear search over object keys (O(n) in the number of keys)
     private func typeForKey(_ key: Key) -> JSONType? {
         guard let offset = valueOffset(forKey: key) else {
             return nil
