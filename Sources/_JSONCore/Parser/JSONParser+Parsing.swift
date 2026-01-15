@@ -328,7 +328,7 @@ extension JSONTokenizer {
                     // Key length is currentIndex - 1 (excluding opening quote, currentIndex points to closing quote)
                     let keyLength = currentIndex - 1
                     var hash: UInt32 = 2166136261  // FNV offset basis
-                    for i in 1...keyLength {
+                    for i in 1..<(keyLength + 1) {
                         hash ^= UInt32(self[i])
                         hash &*= 16777619  // FNV prime
                     }
