@@ -1751,8 +1751,10 @@ final class IkigaJSONTests: XCTestCase {
     }
     
     func testEmptyObjectKey() throws {
-        // Test case for potential bug: empty keys (keyLength = 0) cause invalid range 1...0
-        // This tests the hash computation loop in JSONParser+Parsing.swift line 331
+        // Regression test for empty keys (keyLength = 0): the hash computation loop uses
+        // a range like 1..<(keyLength + 1), which becomes 1..<1 (a valid empty range).
+        // This guards against changes that might introduce an invalid range (e.g. 1...keyLength)
+        // and ensures the parser correctly handles empty object keys.
         let json = """
         {"": "value"}
         """.data(using: .utf8)!

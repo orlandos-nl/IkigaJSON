@@ -942,7 +942,9 @@ extension JSONDescriptionProtocol {
                     // Quick length check first - most common rejection path
                     // For object keys with hash, use hash comparison to skip mismatches
                     if keyType == .objectKey || keyType == .objectKeyWithEscaping {
-                        let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset) ?? 0
+                        guard let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset) else {
+                            fatalError("JSONDescription index structure corrupted: missing object key hash at offset \(offset + Constants.objectKeyHashOffset)")
+                        }
                         // Only do memcmp if hashes match (fast reject on mismatch)
                         if storedHash == searchHash {
                             if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
@@ -986,8 +988,8 @@ extension JSONDescriptionProtocol {
                         }
                     } else if bounds.length == keySize {
                         if keyType == .objectKey || keyType == .objectKeyWithEscaping {
-                            let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset) ?? 0
-                            if storedHash == searchHash {
+                            if let storedHash: UInt32 = self.getInteger(at: offset + Constants.objectKeyHashOffset),
+                               storedHash == searchHash {
                                 if memcmp(key.baseAddress!, json + Int(bounds.offset), Int(bounds.length)) == 0 {
                                     return (index, offset)
                                 }
