@@ -47,7 +47,7 @@ jobs:
         run: |
           curl -L -o swift.exe https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe
           Start-Process -Wait -FilePath .\swift.exe -ArgumentList '/install', '/quiet'
-          echo "C:\Program Files\Swift\bin" >> $env:GITHUB_PATH
+          Add-Content $env:GITHUB_PATH "C:\Program Files\Swift\bin"
         shell: pwsh
       - name: Run tests
         run: swift test -c release
