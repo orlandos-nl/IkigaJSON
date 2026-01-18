@@ -1,297 +1,493 @@
-import _JSONCore
 import Foundation
+import _JSONCore
 
-fileprivate let lowercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
-fileprivate let uppercasedRadix16table: [UInt8] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
+private let lowercasedRadix16table: [UInt8] = [
+  0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
+]
+private let uppercasedRadix16table: [UInt8] = [
+  0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
+]
 
-fileprivate extension UInt8 {
-    func decodeHex() -> UInt8? {
-        if let num = lowercasedRadix16table.firstIndex(of: self) {
-            return numericCast(num)
-        } else if let num = uppercasedRadix16table.firstIndex(of: self) {
-            return numericCast(num)
-        } else {
-            return nil
-        }
+extension UInt8 {
+  fileprivate func decodeHex() -> UInt8? {
+    if let num = lowercasedRadix16table.firstIndex(of: self) {
+      return numericCast(num)
+    } else if let num = uppercasedRadix16table.firstIndex(of: self) {
+      return numericCast(num)
+    } else {
+      return nil
     }
+  }
 }
+
+// MARK: - Span-based String Parsing
 
 extension JSONToken.String {
-    //// Makes a String from a pointer.
-    /// Assumes the length is checked against the bounds `self`
-    ///
-    /// - see: `makeStringFromData` for more information
-    func makeString(from pointer: UnsafePointer<UInt8>, unicode: Bool) -> String? {
-        try? withTemporaryStringBuffer(from: pointer, unicode: unicode) { buffer in
-            return String(bytes: buffer, encoding: .utf8)
+  /// Makes a String from a Span.
+  /// Assumes the length is checked against the bounds `self`
+  func makeString(from span: Span<UInt8>, unicode: Bool) -> String? {
+    let startOffset = start.byteOffset
+
+    if usesEscaping {
+      // Process escaped string
+      var buffer = [UInt8]()
+      buffer.reserveCapacity(byteLength)
+
+      var readerIndex = 0
+      var unicodes = [UInt16]()
+
+      func flushUnicodes() {
+        if !unicodes.isEmpty {
+          // Convert UTF-16 code units to a String, then append its UTF-8 bytes
+          let character = String(decoding: unicodes, as: Unicode.UTF16.self)
+          buffer.append(contentsOf: character.utf8)
+          unicodes.removeAll(keepingCapacity: true)
         }
-    }
+      }
 
-    /// Makes a `Data` blob from a pointer. This data can be used to initialize a string or for comparison operations.
-    /// Assumes the length is checked against the bounds `self`
-    ///
-    /// If `escaping` is false, the string is assumed unescaped and no additional effort will be put
-    /// towards unescaping.
-    func withTemporaryStringBuffer<T>(
-        from pointer: UnsafePointer<UInt8>,
-        unicode: Bool,
-        _ body: (inout UnsafeMutableBufferPointer<UInt8>) throws -> T
-    ) throws -> T {
-        let source = UnsafeBufferPointer(start: pointer + start.byteOffset, count: byteLength)
+      next: while readerIndex < byteLength {
+        let byte = span[startOffset + readerIndex]
 
-        return try withUnsafeTemporaryAllocation(of: UInt8.self, capacity: byteLength) { buffer in
-            var buffer = buffer
-
-            guard usesEscaping else {
-                memcpy(buffer.baseAddress!, source.baseAddress!, byteLength)
-                return try body(&buffer)
-            }
-
-            // If we can't take a shortcut by decoding immediately thanks to an escaping character
-            var readerIndex = 0
-            var writerIndex = 0
-            var unicodes = [UInt16]()
-
-            func flushUnicodes() {
-                if !unicodes.isEmpty {
-                    var character = String(utf16CodeUnits: unicodes, count: unicodes.count)
-                    character.withUTF8 { utf8 in
-                        for byte in utf8 {
-                            buffer[writerIndex] = byte
-                            writerIndex += 1
-                        }
-                    }
-                    unicodes.removeAll(keepingCapacity: true)
-                }
-            }
-
-            next: while readerIndex < byteLength {
-                let byte = source[readerIndex]
-                
-                // If this character is not a baskslash or this was the last character
-                // We don't need to unescape the next character
-                if byte != .backslash || readerIndex + 1 >= byteLength {
-                    // Flush unprocessed unicodes and move past this character
-                    flushUnicodes()
-                    buffer[writerIndex] = byte
-                    writerIndex += 1
-                    readerIndex += 1
-                    continue next
-                }
-
-                // Remove the backslash and translate the next character
-                readerIndex += 1
-
-                if source[readerIndex] == .u {
-                    // `\u` indicates a unicode character
-                    readerIndex += 1
-                    guard readerIndex + 3 < byteLength else {
-                        throw UTF8ParsingError()
-                    }
-                    let unicode = try decodeUnicode(
-                        from: (
-                            source[readerIndex],
-                            source[readerIndex + 1],
-                            source[readerIndex + 2],
-                            source[readerIndex + 3]
-                        )
-                    )
-                    
-                    unicodes.append(unicode)
-                    readerIndex += 4
-
-                    // Continue explicitly, so that we do not trigger the unicode 'flush' flow
-                    continue next
-                }
-
-                flushUnicodes()
-
-                switch source[readerIndex] {
-                case .backslash, .solidus, .quote:
-                    buffer[writerIndex] = source[readerIndex]
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                case .t:
-                    buffer[writerIndex] = .tab
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                case .r:
-                    buffer[writerIndex] = .carriageReturn
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                case .n:
-                    buffer[writerIndex] = .newLine
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                case .f:
-                    buffer[writerIndex] = .formFeed
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                case .b:
-                    buffer[writerIndex] = .backspace
-                    writerIndex += 1
-                    // Move past this character
-                    readerIndex += 1
-                default:
-                    throw UTF8ParsingError()
-                }
-            }
-
-            flushUnicodes()
-            
-            // Strip off the trailing bytes
-            buffer = UnsafeMutableBufferPointer(start: buffer.baseAddress!, count: writerIndex)
-            return try body(&buffer)
+        if byte != .backslash || readerIndex + 1 >= byteLength {
+          flushUnicodes()
+          buffer.append(byte)
+          readerIndex += 1
+          continue next
         }
+
+        readerIndex += 1
+
+        if span[startOffset + readerIndex] == .u {
+          readerIndex += 1
+          guard readerIndex + 3 < byteLength else {
+            return nil
+          }
+          guard
+            let hex0 = span[startOffset + readerIndex].decodeHex(),
+            let hex1 = span[startOffset + readerIndex + 1].decodeHex(),
+            let hex2 = span[startOffset + readerIndex + 2].decodeHex(),
+            let hex3 = span[startOffset + readerIndex + 3].decodeHex()
+          else {
+            return nil
+          }
+
+          var unicodeValue: UInt16 = 0
+          unicodeValue &+= UInt16(hex0) &<< 12
+          unicodeValue &+= UInt16(hex1) &<< 8
+          unicodeValue &+= UInt16(hex2) &<< 4
+          unicodeValue &+= UInt16(hex3)
+
+          unicodes.append(unicodeValue)
+          readerIndex += 4
+          continue next
+        }
+
+        flushUnicodes()
+
+        switch span[startOffset + readerIndex] {
+        case .backslash, .solidus, .quote:
+          buffer.append(span[startOffset + readerIndex])
+          readerIndex += 1
+        case .t:
+          buffer.append(.tab)
+          readerIndex += 1
+        case .r:
+          buffer.append(.carriageReturn)
+          readerIndex += 1
+        case .n:
+          buffer.append(.newLine)
+          readerIndex += 1
+        case .f:
+          buffer.append(.formFeed)
+          readerIndex += 1
+        case .b:
+          buffer.append(.backspace)
+          readerIndex += 1
+        default:
+          return nil
+        }
+      }
+
+      flushUnicodes()
+      return String(decoding: buffer, as: Unicode.UTF8.self)
+    } else {
+      // No escaping, use withUnsafeBufferPointer for efficient string creation
+      return unsafe span.withUnsafeBytes { buffer in
+        let slice = unsafe UnsafeRawBufferPointer(rebasing: buffer[startOffset..<(startOffset + byteLength)])
+        return String(decoding: slice, as: Unicode.UTF8.self)
+      }
     }
+  }
 }
 
-extension JSONToken.Number {
-    /// Parses a `Double` from the pointer
-    /// Assumes the length is checked against the bounds `self`
-    ///
-    /// If `floating` is false, an integer is assumed to reduce parsing weight
-    ///
-    /// Uses the fast path for doubles if possible, when failing falls back to Foundation.
-    ///
-    /// https://www.exploringbinary.com/fast-path-decimal-to-floating-point-conversion/
-    internal func makeDouble(from pointer: UnsafePointer<UInt8>) -> Double {
-        if isInteger {
-            return strtoi(pointer + start.byteOffset, length: byteLength)
-        } else {
-            /// Falls back to the foundation implementation which makes too many copies for this use case
-            ///
-            /// Used when the implementation is unsure
-            return strtod(pointer + start.byteOffset, length: byteLength)
+// MARK: - Array-based String Parsing
+
+extension JSONToken.String {
+  /// Makes a String from an Array.
+  /// Assumes the length is checked against the bounds `self`
+  func makeString(from bytes: [UInt8], unicode: Bool) -> String? {
+    let startOffset = start.byteOffset
+
+    if usesEscaping {
+      // Process escaped string
+      var buffer = [UInt8]()
+      buffer.reserveCapacity(byteLength)
+
+      var readerIndex = 0
+      var unicodes = [UInt16]()
+
+      func flushUnicodes() {
+        if !unicodes.isEmpty {
+          // Convert UTF-16 code units to a String, then append its UTF-8 bytes
+          let character = String(decoding: unicodes, as: Unicode.UTF16.self)
+          buffer.append(contentsOf: character.utf8)
+          unicodes.removeAll(keepingCapacity: true)
         }
+      }
+
+      next: while readerIndex < byteLength {
+        let byte = bytes[startOffset + readerIndex]
+
+        if byte != .backslash || readerIndex + 1 >= byteLength {
+          flushUnicodes()
+          buffer.append(byte)
+          readerIndex += 1
+          continue next
+        }
+
+        readerIndex += 1
+
+        if bytes[startOffset + readerIndex] == .u {
+          readerIndex += 1
+          guard readerIndex + 3 < byteLength else {
+            return nil
+          }
+          guard
+            let hex0 = bytes[startOffset + readerIndex].decodeHex(),
+            let hex1 = bytes[startOffset + readerIndex + 1].decodeHex(),
+            let hex2 = bytes[startOffset + readerIndex + 2].decodeHex(),
+            let hex3 = bytes[startOffset + readerIndex + 3].decodeHex()
+          else {
+            return nil
+          }
+
+          var unicodeValue: UInt16 = 0
+          unicodeValue &+= UInt16(hex0) &<< 12
+          unicodeValue &+= UInt16(hex1) &<< 8
+          unicodeValue &+= UInt16(hex2) &<< 4
+          unicodeValue &+= UInt16(hex3)
+
+          unicodes.append(unicodeValue)
+          readerIndex += 4
+          continue next
+        }
+
+        flushUnicodes()
+
+        switch bytes[startOffset + readerIndex] {
+        case .backslash, .solidus, .quote:
+          buffer.append(bytes[startOffset + readerIndex])
+          readerIndex += 1
+        case .t:
+          buffer.append(.tab)
+          readerIndex += 1
+        case .r:
+          buffer.append(.carriageReturn)
+          readerIndex += 1
+        case .n:
+          buffer.append(.newLine)
+          readerIndex += 1
+        case .f:
+          buffer.append(.formFeed)
+          readerIndex += 1
+        case .b:
+          buffer.append(.backspace)
+          readerIndex += 1
+        default:
+          return nil
+        }
+      }
+
+      flushUnicodes()
+      return String(decoding: buffer, as: Unicode.UTF8.self)
+    } else {
+      // No escaping, use slice for efficient string creation
+      let slice = bytes[startOffset..<(startOffset + byteLength)]
+      return String(decoding: slice, as: Unicode.UTF8.self)
     }
-    
-    internal func makeInt(from pointer: UnsafePointer<UInt8>) -> Int? {
-        var offset = start.byteOffset
-        return pointer.makeInt(offset: &offset, length: Int(byteLength))
+  }
+}
+
+// MARK: - Span-based Number Parsing
+
+extension JSONToken.Number {
+  /// Parses a `Double` from a Span
+  /// Assumes the length is checked against the bounds `self`
+  internal func makeDouble(from span: Span<UInt8>) -> Double {
+    if isInteger {
+      return strtoiSpan(span, start: start.byteOffset, length: byteLength)
+    } else {
+      return strtodSpan(span, start: start.byteOffset, length: byteLength)
     }
+  }
+
+  internal func makeInt(from span: Span<UInt8>) -> Int? {
+    var offset = start.byteOffset
+    return span.makeInt(offset: &offset, length: Int(byteLength))
+  }
+
+  /// Parses a `Double` from an Array
+  /// Assumes the length is checked against the bounds `self`
+  internal func makeDouble(from bytes: [UInt8]) -> Double {
+    if isInteger {
+      return strtoiArray(bytes, start: start.byteOffset, length: byteLength)
+    } else {
+      return strtodArray(bytes, start: start.byteOffset, length: byteLength)
+    }
+  }
+
+  internal func makeInt(from bytes: [UInt8]) -> Int? {
+    var offset = start.byteOffset
+    return bytes.makeInt(offset: &offset, length: Int(byteLength))
+  }
 }
 
 public struct UTF8ParsingError: Error {}
 
-fileprivate func decodeUnicode(
-    from bytes: (UInt8, UInt8, UInt8, UInt8)
-) throws -> UInt16 {
-    guard
-        let hex0 = bytes.0.decodeHex(),
-        let hex1 = bytes.1.decodeHex(),
-        let hex2 = bytes.2.decodeHex(),
-        let hex3 = bytes.3.decodeHex()
-    else {
-        throw UTF8ParsingError()
-    }
+// MARK: - Span-based strtoi/strtod
 
-    var unicode: UInt16 = 0
-    unicode &+= UInt16(hex0) &<< 12
-    unicode &+= UInt16(hex1) &<< 8
-    unicode &+= UInt16(hex2) &<< 4
-    unicode &+= UInt16(hex3)
+private func strtoiSpan(_ span: Span<UInt8>, start: Int, length: Int) -> Double {
+  var offset = start
+  let endOffset = start + length
 
-    return unicode
+  var result = 0
+  while offset < endOffset, span[offset].isDigit {
+    result &*= 10
+    result &+= numericCast(span[offset] &- .zero)
+    offset += 1
+  }
+  return Double(result)
 }
 
-fileprivate func strtoi(_ pointer: UnsafePointer<UInt8>, length: Int) -> Double {
-    var pointer = pointer
-    let endPointer = pointer + length
-    var notAtEnd: Bool { pointer != endPointer }
+private func strtodSpan(_ span: Span<UInt8>, start: Int, length: Int) -> Double {
+  var offset = start
+  let endOffset = start + length
+  var notAtEnd: Bool { offset < endOffset }
 
-    var result = 0
-    while notAtEnd, pointer.pointee.isDigit {
-        result &*= 10
-        result &+= numericCast(pointer.pointee &- .zero)
-        pointer += 1
+  var result: Double
+  var base = 0
+  var sign: Double = 1
+
+  switch span[offset] {
+  case .minus:
+    sign = -1
+    offset += 1
+  case .plus:
+    sign = 1
+    offset += 1
+  default:
+    ()
+  }
+
+  while notAtEnd, span[offset].isDigit {
+    base &*= 10
+    base &+= numericCast(span[offset] &- .zero)
+    offset += 1
+  }
+
+  result = Double(base)
+
+  guard notAtEnd else {
+    return result * sign
+  }
+
+  if span[offset] == .fullStop {
+    offset += 1
+
+    var fraction = 0
+    var divisor = 1
+
+    while notAtEnd, span[offset].isDigit {
+      fraction &*= 10
+      fraction &+= numericCast(span[offset] &- .zero)
+      divisor &*= 10
+      offset += 1
     }
-    return Double(result)
-}
 
-fileprivate func strtod(_ pointer: UnsafePointer<UInt8>, length: Int) -> Double {
-    var pointer = pointer
-    let endPointer = pointer + length
-    var notAtEnd: Bool { pointer != endPointer }
-
-    var result: Double
-    var base = 0
-    var sign: Double = 1
-
-    switch pointer.pointee {
-    case .minus:
-        sign = -1
-        pointer += 1
-    case .plus:
-        sign = 1
-        pointer += 1
-    default:
-        ()
-    }
-
-    while notAtEnd, pointer.pointee.isDigit {
-        base &*= 10
-        base &+= numericCast(pointer.pointee &- .zero)
-        pointer += 1
-    }
-
-    result = Double(base)
+    result += Double(fraction) / Double(divisor)
 
     guard notAtEnd else {
-        return result * sign
+      return result * sign
     }
+  }
 
-    if pointer.pointee == .fullStop {
-        pointer += 1
-
-        var fraction = 0
-        var divisor = 1
-
-        while notAtEnd, pointer.pointee.isDigit {
-            fraction &*= 10
-            fraction &+= numericCast(pointer.pointee &- .zero)
-            divisor &*= 10
-            pointer += 1
-        }
-
-        result += Double(fraction) / Double(divisor)
-
-        guard notAtEnd else {
-            return result * sign
-        }
-    }
-
-    guard pointer.pointee == .e || pointer.pointee == .E else {
-        return result * sign
-    }
-
-    pointer += 1
-    var exponent = 0
-    var exponentSign = 1
-
-    switch pointer.pointee {
-    case .minus:
-        exponentSign = -1
-        pointer += 1
-    case .plus:
-        exponentSign = 1
-        pointer += 1
-    default:
-        ()
-    }
-
-    while notAtEnd, pointer.pointee.isDigit {
-        exponent &*= 10
-        exponent &+= numericCast(pointer.pointee &- .zero)
-        pointer += 1
-    }
-    exponent *= exponentSign
-    result *= pow(10, Double(exponent))
-
+  guard span[offset] == .e || span[offset] == .E else {
     return result * sign
+  }
+
+  offset += 1
+  var exponent = 0
+  var exponentSign = 1
+
+  guard notAtEnd else {
+    return result * sign
+  }
+
+  switch span[offset] {
+  case .minus:
+    exponentSign = -1
+    offset += 1
+  case .plus:
+    exponentSign = 1
+    offset += 1
+  default:
+    ()
+  }
+
+  while notAtEnd, span[offset].isDigit {
+    exponent &*= 10
+    exponent &+= numericCast(span[offset] &- .zero)
+    offset += 1
+  }
+  exponent *= exponentSign
+  result *= pow(10, Double(exponent))
+
+  return result * sign
+}
+
+// MARK: - Array-based strtoi/strtod
+
+private func strtoiArray(_ bytes: [UInt8], start: Int, length: Int) -> Double {
+  var offset = start
+  let endOffset = start + length
+
+  var result = 0
+  while offset < endOffset, bytes[offset].isDigit {
+    result &*= 10
+    result &+= numericCast(bytes[offset] &- .zero)
+    offset += 1
+  }
+  return Double(result)
+}
+
+private func strtodArray(_ bytes: [UInt8], start: Int, length: Int) -> Double {
+  var offset = start
+  let endOffset = start + length
+  var notAtEnd: Bool { offset < endOffset }
+
+  var result: Double
+  var base = 0
+  var sign: Double = 1
+
+  switch bytes[offset] {
+  case .minus:
+    sign = -1
+    offset += 1
+  case .plus:
+    sign = 1
+    offset += 1
+  default:
+    ()
+  }
+
+  while notAtEnd, bytes[offset].isDigit {
+    base &*= 10
+    base &+= numericCast(bytes[offset] &- .zero)
+    offset += 1
+  }
+
+  result = Double(base)
+
+  guard notAtEnd else {
+    return result * sign
+  }
+
+  if bytes[offset] == .fullStop {
+    offset += 1
+
+    var fraction = 0
+    var divisor = 1
+
+    while notAtEnd, bytes[offset].isDigit {
+      fraction &*= 10
+      fraction &+= numericCast(bytes[offset] &- .zero)
+      divisor &*= 10
+      offset += 1
+    }
+
+    result += Double(fraction) / Double(divisor)
+
+    guard notAtEnd else {
+      return result * sign
+    }
+  }
+
+  guard bytes[offset] == .e || bytes[offset] == .E else {
+    return result * sign
+  }
+
+  offset += 1
+  var exponent = 0
+  var exponentSign = 1
+
+  guard notAtEnd else {
+    return result * sign
+  }
+
+  switch bytes[offset] {
+  case .minus:
+    exponentSign = -1
+    offset += 1
+  case .plus:
+    exponentSign = 1
+    offset += 1
+  default:
+    ()
+  }
+
+  while notAtEnd, bytes[offset].isDigit {
+    exponent &*= 10
+    exponent &+= numericCast(bytes[offset] &- .zero)
+    offset += 1
+  }
+  exponent *= exponentSign
+  result *= pow(10, Double(exponent))
+
+  return result * sign
+}
+
+// MARK: - Array-based makeInt
+
+extension Array where Element == UInt8 {
+  func makeInt(offset: inout Int, length: Int) -> Int? {
+    guard offset < count else { return nil }
+
+    let negative = self[offset] == .minus
+    if negative {
+      // skip 1 byte for the minus
+      offset = offset &+ 1
+    }
+
+    let end = Swift.min(offset &+ length, count)
+    guard offset < end else { return nil }
+
+    var number: Int = numericCast(self[offset] &- 0x30)
+    offset = offset &+ 1
+
+    while offset < end {
+      let byte = self[offset]
+      if byte < 0x30 || byte > 0x39 {
+        return negative ? -number : number
+      }
+
+      number = (number &* 10) &+ numericCast(self[offset] &- 0x30)
+      offset = offset &+ 1
+
+      if number < 0 {
+        return nil
+      }
+    }
+
+    return negative ? -number : number
+  }
 }
