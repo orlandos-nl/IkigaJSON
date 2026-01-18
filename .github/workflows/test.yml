@@ -58,4 +58,4 @@ jobs:
       - name: Check out
         uses: actions/checkout@v2
       - name: Build for Embedded Swift
-        run: swift build -c release -Xswiftc -enable-experimental-feature -Xswiftc Embedded -Xswiftc -wmo
+        run: swift build -c release --target _JSONCore -Xswiftc -enable-experimental-feature -Xswiftc Embedded -Xswiftc -wmo
