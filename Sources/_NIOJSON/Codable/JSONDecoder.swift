@@ -310,6 +310,103 @@ private final class _JSONDecoder: Decoder {
   let settings: JSONDecoderSettings
   var snakeCasing: Bool
 
+  /// Incrementally built key cache using byte positions (avoids String allocation).
+  /// Stores (keyStart, keyLength, valueOffset, usesEscaping) for direct byte comparison.
+  private var _keyOffsetCache: [(keyStart: Int, keyLength: Int, valueOffset: Int, usesEscaping: Bool)] = []
+  /// Next index offset to scan from (0 means uninitialized, use firstChildOffset)
+  private var _cacheNextOffset: Int = 0
+  /// Number of keys remaining to scan (negative means uninitialized)
+  private var _cacheRemainingKeys: Int = -1
+  /// Last cache index where we found a key (optimization for sequential access)
+  private var _lastCacheHitIndex: Int = 0
+
+  /// Compare key bytes directly without String allocation
+  @inline(__always)
+  private func keyMatches(_ entry: (keyStart: Int, keyLength: Int, valueOffset: Int, usesEscaping: Bool), key: String) -> Bool {
+    // For escaped strings or snake_case conversion, we need special handling
+    if entry.usesEscaping || snakeCasing {
+      // Fall back to String comparison for complex cases
+      let keyBytes = Array(bytes[entry.keyStart..<(entry.keyStart + entry.keyLength)])
+      let jsonKey: String?
+      if entry.usesEscaping {
+        jsonKey = description.processEscapedString(keyBytes, convertingSnakeCasing: snakeCasing)
+      } else {
+        var mutableBytes = keyBytes
+        description.removeSnakeCasing(from: &mutableBytes)
+        jsonKey = String(bytes: mutableBytes, encoding: .utf8)
+      }
+      return jsonKey == key
+    }
+
+    // Fast path: direct byte comparison using slice elementsEqual
+    let keyUTF8 = key.utf8
+    guard keyUTF8.count == entry.keyLength else { return false }
+    return bytes[entry.keyStart..<(entry.keyStart + entry.keyLength)].elementsEqual(keyUTF8)
+  }
+
+  @usableFromInline
+  func cachedValueOffset(forKey key: String) -> Int? {
+    // Check cache starting from last hit position (Codable often accesses keys in order)
+    let cacheCount = _keyOffsetCache.count
+    if cacheCount > 0 {
+      // Search from last hit to end
+      for i in _lastCacheHitIndex..<cacheCount {
+        if keyMatches(_keyOffsetCache[i], key: key) {
+          _lastCacheHitIndex = i
+          return _keyOffsetCache[i].valueOffset
+        }
+      }
+      // Search from start to last hit
+      for i in 0..<_lastCacheHitIndex {
+        if keyMatches(_keyOffsetCache[i], key: key) {
+          _lastCacheHitIndex = i
+          return _keyOffsetCache[i].valueOffset
+        }
+      }
+    }
+
+    // If we've scanned everything, key doesn't exist
+    if _cacheRemainingKeys == 0 {
+      return nil
+    }
+
+    // Initialize on first access
+    if _cacheRemainingKeys < 0 {
+      guard description.topLevelType == .object else { return nil }
+      _cacheRemainingKeys = description.arrayObjectCount()
+      _cacheNextOffset = Constants.firstArrayObjectChildOffset
+      // Static reserve of 8 - covers most JSON objects without over-allocating
+      _keyOffsetCache.reserveCapacity(8)
+    }
+
+    // Continue scanning from where we left off
+    while _cacheRemainingKeys > 0 {
+      let bounds = description.dataBounds(atIndexOffset: _cacheNextOffset)
+      let keyStart = Int(bounds.offset)
+      let keyLength = Int(bounds.length)
+      let usesEscaping = description.type(atOffset: _cacheNextOffset) == .stringWithEscaping
+
+      // Skip the key index to get value offset
+      description.skipIndex(atOffset: &_cacheNextOffset)
+      let valueOffset = _cacheNextOffset
+
+      // Skip the value index for next iteration
+      description.skipIndex(atOffset: &_cacheNextOffset)
+      _cacheRemainingKeys -= 1
+
+      // Add to cache (just positions, no String allocation)
+      let entry = (keyStart: keyStart, keyLength: keyLength, valueOffset: valueOffset, usesEscaping: usesEscaping)
+      _keyOffsetCache.append(entry)
+
+      // Check if this is the key we're looking for
+      if keyMatches(entry, key: key) {
+        return valueOffset
+      }
+    }
+
+    return nil
+  }
+
   #if swift(>=6.2.1) && Spans
     typealias CodingPath = InlineBuffer<32, any CodingKey>
     var _codingPath: CodingPath
@@ -471,39 +568,33 @@ private struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
   }
 
   private func floatingBounds(forKey key: Key) -> JSONToken.Number? {
-    return decoder.description.floatingBounds(
-      forKey: decoder.string(forKey: key),
-      convertingSnakeCasing: self.decoder.snakeCasing,
-      in: decoder.bytes
-    )
+    guard let offset = decoder.cachedValueOffset(forKey: decoder.string(forKey: key)) else {
+      return nil
+    }
+    return decoder.description.floatingBounds(atOffset: offset, in: decoder.bytes)
   }
 
   private func integerBounds(forKey key: Key) -> JSONToken.Number? {
-    return decoder.description.integerBounds(
-      forKey: decoder.string(forKey: key),
-      convertingSnakeCasing: self.decoder.snakeCasing,
-      in: decoder.bytes
-    )
+    guard let offset = decoder.cachedValueOffset(forKey: decoder.string(forKey: key)) else {
+      return nil
+    }
+    return decoder.description.integerBounds(atOffset: offset, in: decoder.bytes)
   }
 
   func contains(_ key: Key) -> Bool {
-    return decoder.description.containsKey(
-      decoder.string(forKey: key),
-      convertingSnakeCasing: self.decoder.snakeCasing,
-      in: decoder.bytes,
-      unicode: decoder.settings.decodeUnicode
-    )
+    return decoder.cachedValueOffset(forKey: decoder.string(forKey: key)) != nil
+  }
+
+  private func typeForKey(_ key: Key) -> JSONType? {
+    guard let offset = decoder.cachedValueOffset(forKey: decoder.string(forKey: key)) else {
+      return nil
+    }
+    return decoder.description.type(atOffset: offset)
   }
 
   func decodeNil(forKey key: Key) throws -> Bool {
-    switch (
-      decoder.settings.nilValueDecodingStrategy,
-      decoder.description.type(
-        ofKey: decoder.string(forKey: key),
-        convertingSnakeCasing: self.decoder.snakeCasing,
-        in: decoder.bytes
-      )
-    ) {
+    let type = typeForKey(key)
+    switch (decoder.settings.nilValueDecodingStrategy, type) {
     case (.default, .none), (.treatNilValuesAsMissing, .none),
       (.treatNilValuesAsMissing, .some(.null)):
       throw JSONDecoderError.decodingError(expected: Void?.self, keyPath: codingPath + [key])
@@ -513,14 +604,8 @@ private struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
   }
 
   func decodeIfPresentNil(forKey key: Key) throws -> Bool {
-    switch (
-      decoder.settings.nilValueDecodingStrategy,
-      decoder.description.type(
-        ofKey: decoder.string(forKey: key),
-        convertingSnakeCasing: self.decoder.snakeCasing,
-        in: decoder.bytes
-      )
-    ) {
+    let type = typeForKey(key)
+    switch (decoder.settings.nilValueDecodingStrategy, type) {
     case (.treatNilValuesAsMissing, .none), (.treatNilValuesAsMissing, .some(.null)):
       throw JSONDecoderError.decodingError(expected: Void?.self, keyPath: codingPath + [key])
     case (.default, .none), (.decodeNilForKeyNotFound, .none), (_, .some(.null)): return true
@@ -575,11 +660,7 @@ private struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
   }
 
   func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool {
-    switch decoder.description.type(
-      ofKey: decoder.string(forKey: key),
-      convertingSnakeCasing: self.decoder.snakeCasing,
-      in: decoder.bytes
-    ) {
+    switch typeForKey(key) {
     case .some(.boolTrue): return true
     case .some(.boolFalse): return false
     default: throw JSONDecoderError.decodingError(expected: type, keyPath: codingPath + [key])
@@ -588,11 +669,8 @@ private struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
 
   func decode(_ type: String.Type, forKey key: Key) throws -> String {
     guard
-      let bounds = decoder.description.stringBounds(
-        forKey: decoder.string(forKey: key),
-        convertingSnakeCasing: self.decoder.snakeCasing,
-        in: decoder.bytes
-      )
+      let offset = decoder.cachedValueOffset(forKey: decoder.string(forKey: key)),
+      let bounds = decoder.description.stringBounds(atOffset: offset, in: decoder.bytes)
     else {
       throw JSONDecoderError.decodingError(expected: type, keyPath: codingPath + [key])
     }
@@ -663,13 +741,8 @@ private struct KeyedJSONDecodingContainer<Key: CodingKey>: KeyedDecodingContaine
   private func subDecoder<NestedKey: CodingKey>(
     forKey key: NestedKey, orThrow failureError: Error, appendingToPath: Bool = true
   ) throws -> _JSONDecoder {
-    guard
-      let (_, offset) = self.decoder.description.valueOffset(
-        forKey: self.decoder.string(forKey: key),
-        convertingSnakeCasing: self.decoder.snakeCasing,
-        in: self.decoder.bytes
-      )
-    else {
+    let keyString = self.decoder.string(forKey: key)
+    guard let offset = self.decoder.cachedValueOffset(forKey: keyString) else {
       throw failureError
     }
     let subDecoder = self.decoder.subDecoder(offsetBy: offset)

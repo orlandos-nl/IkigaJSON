@@ -199,11 +199,8 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   @inlinable
   func slice(from offset: Int, length: Int) -> JSONDescription {
     let copy = JSONDescription(size: length)
-
-    // Copy bytes from source to destination
-    for i in 0..<length {
-      copy.storage[i] = storage[offset + i]
-    }
+    // Bulk copy using replaceSubrange (much faster than byte-by-byte loop)
+    copy.storage.replaceSubrange(0..<length, with: storage[offset..<(offset + length)])
     copy.writtenBytes = length
     return copy
   }
@@ -1143,12 +1140,8 @@ extension JSONDescriptionProtocol {
     for _ in 0..<count {
       let bounds = dataBounds(atIndexOffset: offset)
 
-      // Extract bytes from array
-      var keyBytes = [UInt8]()
-      keyBytes.reserveCapacity(Int(bounds.length))
-      for i in 0..<Int(bounds.length) {
-        keyBytes.append(bytes[Int(bounds.offset) + i])
-      }
+      // Extract bytes from array using bulk copy
+      var keyBytes = Array(bytes[Int(bounds.offset)..<Int(bounds.offset + bounds.length)])
 
       let usesEscaping = self.type(atOffset: offset) == .stringWithEscaping
 
@@ -1173,7 +1166,61 @@ extension JSONDescriptionProtocol {
     return keys
   }
 
-  private func processEscapedString(_ bytes: [UInt8], convertingSnakeCasing: Bool) -> String? {
+  /// Returns an array mapping key strings to their value offsets in the description.
+  /// Uses an array instead of dictionary for better cache locality and faster building.
+  /// Linear scan is fast for typical JSON objects with < 20 keys.
+  @usableFromInline
+  func keyValueOffsets(
+    in bytes: [UInt8],
+    convertingSnakeCasing: Bool
+  ) -> [(key: String, offset: Int)] {
+    guard self.topLevelType == .object else {
+      return []
+    }
+
+    let count = arrayObjectCount()
+    var offset = Constants.firstArrayObjectChildOffset
+
+    var result = [(key: String, offset: Int)]()
+    result.reserveCapacity(count)
+
+    for _ in 0..<count {
+      let bounds = dataBounds(atIndexOffset: offset)
+
+      // Get the key string
+      let keyStart = Int(bounds.offset)
+      let keyLength = Int(bounds.length)
+      let usesEscaping = self.type(atOffset: offset) == .stringWithEscaping
+
+      let key: String?
+      if usesEscaping {
+        let keyBytes = Array(bytes[keyStart..<(keyStart + keyLength)])
+        key = processEscapedString(keyBytes, convertingSnakeCasing: convertingSnakeCasing)
+      } else if convertingSnakeCasing {
+        var keyBytes = Array(bytes[keyStart..<(keyStart + keyLength)])
+        removeSnakeCasing(from: &keyBytes)
+        key = String(bytes: keyBytes, encoding: .utf8)
+      } else {
+        key = String(decoding: bytes[keyStart..<(keyStart + keyLength)], as: Unicode.UTF8.self)
+      }
+
+      // Skip the key to get to value offset
+      skipIndex(atOffset: &offset)
+      let valueOffset = offset
+
+      if let key = key {
+        result.append((key, valueOffset))
+      }
+
+      // Skip the value
+      skipIndex(atOffset: &offset)
+    }
+
+    return result
+  }
+
+  @usableFromInline
+  func processEscapedString(_ bytes: [UInt8], convertingSnakeCasing: Bool) -> String? {
     var result = [UInt8]()
     result.reserveCapacity(bytes.count)
     var i = 0
@@ -1435,15 +1482,7 @@ extension JSONDescriptionProtocol {
       return nil
     }
 
-    let type = self.type(atOffset: offset)
-    guard type == .integer else { return nil }
-
-    let bounds = dataBounds(atIndexOffset: offset)
-    return JSONToken.Number(
-      start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
-      end: JSONSourcePosition(byteIndex: Int(bounds.offset + bounds.length)),
-      isInteger: true
-    )
+    return integerBounds(atOffset: offset, in: bytes)
   }
 
   @inlinable
@@ -1462,6 +1501,39 @@ extension JSONDescriptionProtocol {
       return nil
     }
 
+    return floatingBounds(atOffset: offset, in: bytes)
+  }
+
+  // MARK: - Offset-based bounds methods for cached lookups
+
+  @usableFromInline
+  func stringBounds(atOffset offset: Int, in bytes: [UInt8]) -> JSONToken.String? {
+    let type = self.type(atOffset: offset)
+    guard type == .string || type == .stringWithEscaping else { return nil }
+
+    let bounds = dataBounds(atIndexOffset: offset)
+    return JSONToken.String(
+      start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+      byteLength: Int(bounds.length),
+      usesEscaping: type == .stringWithEscaping
+    )
+  }
+
+  @usableFromInline
+  func integerBounds(atOffset offset: Int, in bytes: [UInt8]) -> JSONToken.Number? {
+    let type = self.type(atOffset: offset)
+    guard type == .integer else { return nil }
+
+    let bounds = dataBounds(atIndexOffset: offset)
+    return JSONToken.Number(
+      start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
+      end: JSONSourcePosition(byteIndex: Int(bounds.offset + bounds.length)),
+      isInteger: true
+    )
+  }
+
+  @usableFromInline
+  func floatingBounds(atOffset offset: Int, in bytes: [UInt8]) -> JSONToken.Number? {
     let type = self.type(atOffset: offset)
     guard type == .integer || type == .floatingNumber else { return nil }
 
