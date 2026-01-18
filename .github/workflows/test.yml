@@ -12,12 +12,13 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - swift:6.0
+          - swift:6.2
+          - swiftlang/swift:nightly-6.3-jammy
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Run tests
         run: swift test -c release
   test-macos:
@@ -34,6 +35,30 @@ jobs:
         with:
           xcode-version: ${{ matrix.xcode }}
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Run tests
         run: swift test -c release
+  test-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        swift:
+          - "6.2"
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: Install Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: ${{ matrix.swift }}
+      - name: Run tests
+        run: swift test -c release
+  test-embedded:
+    runs-on: ubuntu-latest
+    container: swiftlang/swift:nightly-main-jammy
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: Build for Embedded Swift
+        run: swift build -c release -Xswiftc -enable-experimental-feature -Xswiftc Embedded -Xswiftc -wmo
