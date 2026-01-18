@@ -103,10 +103,10 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   package func writeBuffer(_ jsonDescription: JSONDescription) {
     ensureWritableRoom(for: jsonDescription.writtenBytes)
 
-    // Append bytes from source
-    for i in 0..<jsonDescription.writtenBytes {
-      storage[writtenBytes + i] = jsonDescription.storage[i]
-    }
+    // Copy bytes from source
+    let destRange = writtenBytes..<(writtenBytes + jsonDescription.writtenBytes)
+    let sourceSlice = jsonDescription.storage[0..<jsonDescription.writtenBytes]
+    storage.replaceSubrange(destRange, with: sourceSlice)
     writtenBytes += jsonDescription.writtenBytes
   }
 
@@ -121,11 +121,8 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   @inlinable
   func expand(minimumCapacity: Int) {
     let newSize = max(storage.count * 2, minimumCapacity)
-    storage.reserveCapacity(newSize)
-    // Extend storage with zeros to match new capacity
-    while storage.count < newSize {
-      storage.append(0)
-    }
+    let currentCount = storage.count
+    storage.append(contentsOf: repeatElement(0 as UInt8, count: newSize - currentCount))
   }
 
   func reset() {
@@ -903,18 +900,31 @@ extension JSONDescriptionProtocol {
       // Fetch the bounds for the key in JSON
       let bounds = dataBounds(atIndexOffset: offset)
 
-      // Extract the key bytes from span for comparison
-      var spanKeyBytes = [UInt8]()
-      spanKeyBytes.reserveCapacity(Int(bounds.length))
-      for i in 0..<Int(bounds.length) {
-        spanKeyBytes.append(span[Int(bounds.offset) + i])
-      }
-
-      // Does the key match our search?
-      if !convertingSnakeCasing, bounds.length == keySize, keyBytes == spanKeyBytes {
-        return (index, offset)
-      } else if convertingSnakeCasing, snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: spanKeyBytes) {
-        return (index, offset)
+      // Compare bytes in-place without allocating temporary array
+      if !convertingSnakeCasing {
+        if bounds.length == keySize {
+          var matches = true
+          for i in 0..<keySize {
+            if span[Int(bounds.offset) + i] != keyBytes[i] {
+              matches = false
+              break
+            }
+          }
+          if matches {
+            return (index, offset)
+          }
+        }
+      } else {
+        // For snake case conversion, we still need the bytes for comparison
+        // but use withContiguousStorageIfAvailable when possible
+        var spanKeyBytes = [UInt8]()
+        spanKeyBytes.reserveCapacity(Int(bounds.length))
+        for i in 0..<Int(bounds.length) {
+          spanKeyBytes.append(span[Int(bounds.offset) + i])
+        }
+        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: spanKeyBytes) {
+          return (index, offset)
+        }
       }
 
       // Skip key
@@ -954,18 +964,25 @@ extension JSONDescriptionProtocol {
       // Fetch the bounds for the key in JSON
       let bounds = dataBounds(atIndexOffset: offset)
 
-      // Extract the key bytes from array for comparison
-      var arrayKeyBytes = [UInt8]()
-      arrayKeyBytes.reserveCapacity(Int(bounds.length))
-      for i in 0..<Int(bounds.length) {
-        arrayKeyBytes.append(bytes[Int(bounds.offset) + i])
-      }
-
-      // Does the key match our search?
-      if !convertingSnakeCasing, bounds.length == keySize, keyBytes == arrayKeyBytes {
-        return (index, offset)
-      } else if convertingSnakeCasing, snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: arrayKeyBytes) {
-        return (index, offset)
+      // Compare bytes in-place without allocating temporary array
+      if !convertingSnakeCasing {
+        if bounds.length == keySize {
+          let start = Int(bounds.offset)
+          let end = start + keySize
+          // Use slice comparison - no allocation needed
+          let jsonKeySlice = bytes[start..<end]
+          if jsonKeySlice.elementsEqual(keyBytes) {
+            return (index, offset)
+          }
+        }
+      } else {
+        // For snake case conversion, extract slice and compare
+        let start = Int(bounds.offset)
+        let end = start + Int(bounds.length)
+        let jsonKeySlice = Array(bytes[start..<end])
+        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: jsonKeySlice) {
+          return (index, offset)
+        }
       }
 
       // Skip key

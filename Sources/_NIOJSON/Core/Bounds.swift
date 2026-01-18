@@ -111,13 +111,11 @@ extension JSONToken.String {
       flushUnicodes()
       return String(decoding: buffer, as: Unicode.UTF8.self)
     } else {
-      // No escaping, copy directly
-      var buffer = [UInt8]()
-      buffer.reserveCapacity(byteLength)
-      for i in 0..<byteLength {
-        buffer.append(span[startOffset + i])
+      // No escaping, use withUnsafeBufferPointer for efficient string creation
+      return unsafe span.withUnsafeBytes { buffer in
+        let slice = unsafe UnsafeRawBufferPointer(rebasing: buffer[startOffset..<(startOffset + byteLength)])
+        return String(decoding: slice, as: Unicode.UTF8.self)
       }
-      return String(decoding: buffer, as: Unicode.UTF8.self)
     }
   }
 }
@@ -213,13 +211,9 @@ extension JSONToken.String {
       flushUnicodes()
       return String(decoding: buffer, as: Unicode.UTF8.self)
     } else {
-      // No escaping, copy directly
-      var buffer = [UInt8]()
-      buffer.reserveCapacity(byteLength)
-      for i in 0..<byteLength {
-        buffer.append(bytes[startOffset + i])
-      }
-      return String(decoding: buffer, as: Unicode.UTF8.self)
+      // No escaping, use slice for efficient string creation
+      let slice = bytes[startOffset..<(startOffset + byteLength)]
+      return String(decoding: slice, as: Unicode.UTF8.self)
     }
   }
 }
