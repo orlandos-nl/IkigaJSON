@@ -41,14 +41,12 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
+      - uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.2-release
+          swift-build: 6.2.3-RELEASE
       - name: Check out
         uses: actions/checkout@v2
-      - name: Install Swift
-        run: |
-          curl -L -o swift.exe https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe
-          Start-Process -Wait -FilePath .\swift.exe -ArgumentList '/install', '/quiet'
-          Add-Content $env:GITHUB_PATH "C:\Program Files\Swift\bin"
-        shell: pwsh
       - name: Run tests
         run: swift test -c release
   test-embedded:
