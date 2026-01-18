@@ -38,16 +38,11 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
     bytes.count - currentOffset
   }
 
-  #if SourcePositions
-    public private(set) var line = 0
-    public private(set) var lastLineOffset = 0
-  #else
-    @usableFromInline
-    package var line: Int { -1 }
+  @usableFromInline
+  package var line: Int { -1 }
 
-    @usableFromInline
-    package var lastLineOffset: Int { -1 }
-  #endif
+  @usableFromInline
+  package var column: Int { -1 }
 
   @inline(__always)
   @usableFromInline
@@ -56,16 +51,6 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
   }
 
   public var destination: Destination
-
-  #if SourcePositions
-    @inlinable
-    public var column: Int {
-      currentOffset - lastLineOffset
-    }
-  #else
-    @usableFromInline
-    package var column: Int { -1 }
-  #endif
 
   /// Advances the amount of bytes processed and updates the related offset and count
   @usableFromInline
@@ -95,28 +80,57 @@ extension JSONTokenizer {
   }
 
   /// Skips all whitespace (space, tab, carriage-return and newline)
+  /// Uses SWAR to scan 8 bytes at a time for better performance
   @_optimize(speed)
   @usableFromInline
   @_lifetime(self: copy self)
   mutating func _skipWhitespace() {
-    var offset = 0
+    let searchEnd = bytes.count
+    let searchStart = currentOffset
 
-    loop: while offset < count {
-      let byte = self[offset]
+    let offset: Int = unsafe bytes.withUnsafeBufferPointer { buffer in
+      var i = searchStart
 
-      #if SourcePositions
-        if byte == .newLine {
-          line += 1
-          lastLineOffset = currentOffset + 1
+      // Align to 8-byte boundary first
+      let alignedStart = (i + 7) & ~7
+      while i < min(alignedStart, searchEnd) {
+        let byte = unsafe buffer[i]
+        if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+          return i - searchStart
         }
-      #endif
-
-      switch byte {
-      case .space, .tab, .carriageReturn, .newLine:
-        offset += 1
-      default:
-        break loop
+        i &+= 1
       }
+
+      // Process 8 bytes at a time with better memory access pattern
+      while i &+ 8 <= searchEnd {
+        var foundNonWhitespace = false
+        var nonWhitespaceOffset = 0
+
+        for j in 0..<8 {
+          let byte = unsafe buffer[i &+ j]
+          if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+            foundNonWhitespace = true
+            nonWhitespaceOffset = j
+            break
+          }
+        }
+
+        if foundNonWhitespace {
+          return (i &+ nonWhitespaceOffset) - searchStart
+        }
+        i &+= 8
+      }
+
+      // Process remaining bytes
+      while i < searchEnd {
+        let byte = unsafe buffer[i]
+        if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+          return i - searchStart
+        }
+        i &+= 1
+      }
+
+      return searchEnd - searchStart
     }
 
     advance(offset)

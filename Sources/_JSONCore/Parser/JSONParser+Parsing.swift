@@ -239,58 +239,114 @@ extension JSONTokenizer {
         line: line, column: column, token: currentByte, reason: .expectedObjectKey)
     }
 
-    // The offset is calculated and written later, updating the offset too much results in performance loss
-    var currentIndex: Int = 1
+    // Fast path: scan 8 bytes at a time looking for " or \
+    let searchStart = currentOffset &+ 1
+    let searchEnd = bytes.count
 
-    // If any excaping character is detected, it will be noted
-    // This reduces the performance cost on parsing most strings, removing a second unneccessary check
-    var didEscape = false
-    defer { advance(currentIndex) }
+    // Use closure only to find the string end index, return results outside
+    // to avoid overlapping access errors with self mutation
+    let result: (foundIndex: Int, didEscape: Bool, found: Bool) = unsafe bytes.withUnsafeBufferPointer { buffer in
+      // Broadcast targets to all bytes in 64-bit words
+      let quoteTarget: UInt64 = 0x2222222222222222  // " = 0x22
+      let backslashTarget: UInt64 = 0x5C5C5C5C5C5C5C5C  // \ = 0x5C
 
-    while currentIndex < count {
-      defer { currentIndex = currentIndex &+ 1 }
+      var i = searchStart
+      var didEscape = false
 
-      let byte = self[currentIndex]
+      // Align to 8-byte boundary first
+      let alignedStart = (i + 7) & ~7
+      while i < min(alignedStart, searchEnd) {
+        let byte = buffer[i]
+        if byte == .quote {
+          // Found unescaped quote - string ends here
+          return (i - currentOffset, didEscape, true)
+        } else if byte == .backslash {
+          didEscape = true
+        }
+        i &+= 1
+      }
 
-      // If it's a quote, check if it's escaped
-      if byte == .quote {
-        var escaped = false
+      // Process 8 bytes at a time
+      while i &+ 8 <= searchEnd {
+        let word = unsafe buffer.baseAddress!.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
 
-        if didEscape {
-          // No need to run this logic if no escape symbol was present
-          var backwardsOffset = currentIndex &- 1
+        // Check for quote
+        let xoredQuote = word ^ quoteTarget
+        let hasQuote = (xoredQuote &- 0x0101010101010101) & ~xoredQuote & 0x8080808080808080
 
-          // Every escaped character can have another escaped character
-          escapeLoop: while backwardsOffset >= 1 {
-            defer { backwardsOffset = backwardsOffset &- 1 }
+        // Check for backslash
+        let xoredBackslash = word ^ backslashTarget
+        let hasBackslash = (xoredBackslash &- 0x0101010101010101) & ~xoredBackslash & 0x8080808080808080
 
-            if self[backwardsOffset] == .backslash {
-              // TODO: Is this the fastest way?
-              // An integer incrementing that `& 1 == 1` is also escaped, likely more solutions
-              escaped = !escaped
-            } else {
-              break escapeLoop
+        let combined = hasQuote | hasBackslash
+
+        if combined != 0 {
+          // Found something - process bytes one by one to handle escaping correctly
+          for j in 0..<8 {
+            let byte = buffer[i &+ j]
+            if byte == .quote {
+              // Check if escaped
+              var escaped = false
+              if didEscape {
+                var backwardsOffset = (i &+ j) &- 1
+                while backwardsOffset >= searchStart &- 1 {
+                  if buffer[backwardsOffset] == .backslash {
+                    escaped = !escaped
+                    backwardsOffset &-= 1
+                  } else {
+                    break
+                  }
+                }
+              }
+              if !escaped {
+                return ((i &+ j) - currentOffset, didEscape, true)
+              }
+            } else if byte == .backslash {
+              didEscape = true
             }
           }
         }
-
-        if !escaped {
-          // Defer didn't trigger yet
-          let start = JSONSourcePosition(byteIndex: currentOffset)
-          destination.stringFound(
-            .init(
-              start: start,
-              byteLength: currentIndex &+ 1,
-              usesEscaping: didEscape
-            ))
-          return
-        }
-      } else if byte == .backslash {
-        // Strings are parsed front-to-back, so this backslash is meaningless except it helps us detect if it's escaped
-        didEscape = true
+        i &+= 8
       }
+
+      // Process remaining bytes
+      while i < searchEnd {
+        let byte = buffer[i]
+        if byte == .quote {
+          // Check if escaped
+          var escaped = false
+          if didEscape {
+            var backwardsOffset = i &- 1
+            while backwardsOffset >= searchStart &- 1 {
+              if buffer[backwardsOffset] == .backslash {
+                escaped = !escaped
+                backwardsOffset &-= 1
+              } else {
+                break
+              }
+            }
+          }
+          if !escaped {
+            return (i - currentOffset, didEscape, true)
+          }
+        } else if byte == .backslash {
+          didEscape = true
+        }
+        i &+= 1
+      }
+
+      // String not terminated
+      return (searchEnd - currentOffset, didEscape, false)
     }
 
-    throw JSONParserError.missingData(line: line, column: column)
+    guard result.found else {
+      throw JSONParserError.missingData(line: line, column: column)
+    }
+
+    let currentIndex = result.foundIndex
+    let start = JSONSourcePosition(byteIndex: currentOffset)
+    advance(currentIndex &+ 1)
+    destination.stringFound(
+      .init(start: start, byteLength: currentIndex &+ 1, usesEscaping: result.didEscape))
   }
 }
