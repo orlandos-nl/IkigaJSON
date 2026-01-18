@@ -18,7 +18,7 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
       - name: Run tests
         run: swift test -c release
   test-macos:
@@ -35,23 +35,20 @@ jobs:
         with:
           xcode-version: ${{ matrix.xcode }}
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
       - name: Run tests
         run: swift test -c release
   test-windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        swift:
-          - "6.2"
     runs-on: windows-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
       - name: Install Swift
-        uses: SwiftyLab/setup-swift@latest
-        with:
-          swift-version: ${{ matrix.swift }}
+        run: |
+          curl -L -o swift.exe https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe
+          Start-Process -Wait -FilePath .\swift.exe -ArgumentList '/install', '/quiet'
+          echo "C:\Program Files\Swift\bin" >> $env:GITHUB_PATH
+        shell: pwsh
       - name: Run tests
         run: swift test -c release
   test-embedded:
@@ -59,6 +56,6 @@ jobs:
     container: swiftlang/swift:nightly-main-jammy
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
       - name: Build for Embedded Swift
         run: swift build -c release -Xswiftc -enable-experimental-feature -Xswiftc Embedded -Xswiftc -wmo

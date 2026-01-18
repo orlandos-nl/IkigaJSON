@@ -200,6 +200,41 @@ By design you can build on top of any data storage as long as it exposes a point
 
 This allocation (called the JSONDescription) acts as a filter over the original dataset, indicating to IkigaJSON where keys, values and objects start/end. Therefore IkigaJSON can do really fast inline mutations, and provide objects such as JSONObject/JSONDescription that are extremely performant at reading individual values. This also allows IkigaJSON to decode from its own helper types such as JSONObject and JSONArray, since it doesn't need to regenerate a JSONDescription and has the original buffer at hand.
 
+#### Benchmark Results
+
+Benchmarks run on Apple M4 Max (macOS 26). Lower time is better. Run benchmarks yourself with:
+
+```bash
+cd Benchmarks/JSONBenchmark && swift package benchmark
+```
+
+**Encoding Performance (p50 wall clock time)**
+
+| Payload Size | Foundation | IkigaJSON | Winner |
+|:-------------|:-----------|:----------|:-------|
+| Small (~100 bytes) | 3.75 μs | 3.13 μs | IkigaJSON (1.2x) |
+| Medium (~400 bytes) | 6.96 μs | 5.63 μs | IkigaJSON (1.2x) |
+| Large (~17 KB) | 382 μs | 282 μs | IkigaJSON (1.4x) |
+
+**Decoding Performance (p50 wall clock time)**
+
+| Payload Size | Foundation | IkigaJSON |
+|:-------------|:-----------|:----------|
+| Small (~100 bytes) | 5.00 μs | 5.75 μs |
+| Medium (~400 bytes) | 11 μs | 34 μs |
+| Large (~17 KB) | 416 μs | 37 ms |
+
+**Memory Allocations (malloc count)**
+
+| Operation | Foundation | IkigaJSON |
+|:----------|:-----------|:----------|
+| Decode Small | 15 | 25 |
+| Decode Medium | 33 | 285 |
+| Encode Small | 14 | 15 |
+| Encode Medium | 24 | 42 |
+
+IkigaJSON excels at encoding tasks and provides efficient APIs for working with raw JSON data (JSONObject, JSONArray) without full decoding overhead.
+
 ### Support
 
 - All decoding strategies that Foundation supports
