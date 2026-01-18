@@ -7,3 +7,4 @@ Package.resolved
 /*.xcodeproj
 Package.resolved
 Benchmarks/JSONBenchmark/.build
+Benchmarks/JSONBenchmark/.swiftpm

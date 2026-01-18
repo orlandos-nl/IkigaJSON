@@ -1,18 +1,18 @@
+import IkigaJSON
+
 let json = """
-{
-    "name": "John",
-    "age": 30,
-    "city": "New York"
-}
-""".data(using: .utf8)!
+  {
+      "name": "John",
+      "age": 30,
+      "city": "New York"
+  }
+  """.data(using: .utf8)!
 
 struct Person: Codable {
-    let name: String
-    let age: Int
-    let city: String
+  let name: String
+  let age: Int
+  let city: String
 }
-
-import IkigaJSON
 
 // Decode JSON to a struct, like JSONDecoder from Foundation
 let decoder = IkigaJSONDecoder()
