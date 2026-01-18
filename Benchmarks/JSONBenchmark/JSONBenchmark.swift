@@ -47,6 +47,24 @@ struct LargePayload: Codable {
   }
 }
 
+// MARK: - Partial Structs (decode only half the fields)
+
+/// Decodes only 5 of the 10 fields in mediumJSON
+struct PartialMediumUser: Codable {
+  let id: Int
+  let username: String
+  let email: String
+  let age: Int
+  let isActive: Bool
+  // Skipped: firstName, lastName, createdAt, roles, settings
+}
+
+/// Large payload using partial user decoding
+struct PartialLargePayload: Codable {
+  let users: [PartialMediumUser]
+  // Skipped: metadata, tags
+}
+
 // MARK: - Sample JSON Data
 
 let smallJSON = """
@@ -213,6 +231,36 @@ let benchmarks: @Sendable () -> Void = {
     let decoder = IkigaJSONDecoder()
     for _ in benchmark.scaledIterations {
       blackHole(try! decoder.decode(LargePayload.self, from: largeJSON))
+    }
+  }
+
+  // --- Partial Decoding (skip half the fields) ---
+
+  Benchmark("Decode Medium Partial - Foundation") { benchmark in
+    let decoder = JSONDecoder()
+    for _ in benchmark.scaledIterations {
+      blackHole(try! decoder.decode(PartialMediumUser.self, from: mediumJSON))
+    }
+  }
+
+  Benchmark("Decode Medium Partial - IkigaJSON") { benchmark in
+    let decoder = IkigaJSONDecoder()
+    for _ in benchmark.scaledIterations {
+      blackHole(try! decoder.decode(PartialMediumUser.self, from: mediumJSON))
+    }
+  }
+
+  Benchmark("Decode Large Partial - Foundation") { benchmark in
+    let decoder = JSONDecoder()
+    for _ in benchmark.scaledIterations {
+      blackHole(try! decoder.decode(PartialLargePayload.self, from: largeJSON))
+    }
+  }
+
+  Benchmark("Decode Large Partial - IkigaJSON") { benchmark in
+    let decoder = IkigaJSONDecoder()
+    for _ in benchmark.scaledIterations {
+      blackHole(try! decoder.decode(PartialLargePayload.self, from: largeJSON))
     }
   }
 
