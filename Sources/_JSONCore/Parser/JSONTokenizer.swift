@@ -69,6 +69,7 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
 
   /// Advances the amount of bytes processed and updates the related offset and count
   @usableFromInline
+  @_lifetime(self: copy self)
   internal mutating func advance(_ offset: Int) {
     currentOffset += offset
   }
@@ -96,6 +97,7 @@ extension JSONTokenizer {
   /// Skips all whitespace (space, tab, carriage-return and newline)
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   mutating func _skipWhitespace() {
     var offset = 0
 
@@ -126,6 +128,7 @@ extension JSONTokenizer {
   @_optimize(speed)
   @inline(__always)
   @usableFromInline
+  @_lifetime(self: copy self)
   internal mutating func skipWhitespace() throws(JSONParserError) {
     _skipWhitespace()
     try assertMoreData()

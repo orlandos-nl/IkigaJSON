@@ -155,6 +155,38 @@ public struct IkigaJSONDecoder: Sendable {
     return try decode(type, from: buffer)
   }
 
+  /// Parses the Decodable type from an `UnsafeBufferPointer<UInt8>`.
+  @unsafe
+  public func decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws
+    -> D
+  {
+    try unsafe _decode(type, from: buffer).element
+  }
+
+  /// Parses the Decodable type from an `UnsafeBufferPointer<UInt8>`, returning both the decoded element and the number of bytes parsed.
+  @unsafe
+  public func _decode<D: Decodable>(_ type: D.Type, from buffer: UnsafeBufferPointer<UInt8>) throws
+    -> (element: D, parsed: Int)
+  {
+    let bytes = unsafe Array(buffer)
+    return try description.withDescription { description in
+      let span = unsafe Span<UInt8>(_unsafeElements: buffer)
+      var parser = JSONTokenizer(
+        span: span,
+        destination: description
+      )
+      try parser.scanValue()
+
+      let decoder = _JSONDecoder(
+        description: parser.destination.readOnlySubDescription(offset: 0),
+        codingPath: .init(),
+        bytes: bytes,
+        settings: settings
+      )
+      return (try D(from: decoder), parser.currentOffset)
+    }
+  }
+
   /// Parses the Decodable type from a JSONObject.
   public func decode<D: Decodable>(_ type: D.Type, from object: JSONObject) throws -> D {
     let bytes = object.jsonBuffer.getBytes(at: 0, length: object.jsonBuffer.readableBytes) ?? []

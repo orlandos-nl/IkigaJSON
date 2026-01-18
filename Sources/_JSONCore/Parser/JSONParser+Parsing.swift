@@ -4,6 +4,7 @@ extension JSONTokenizer {
   /// Scans a JSON object and parses values within it
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   internal mutating func scanArray() throws(JSONParserError) {
     assert(currentByte == .squareLeft, "An array was scanned but the first byte was not `[`")
 
@@ -59,6 +60,7 @@ extension JSONTokenizer {
   /// Scans a JSON object and parses keys and values within it
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   internal mutating func scanObject() throws(JSONParserError) {
     assert(currentByte == .curlyLeft, "An object was scanned but the first byte was not `{`")
 
@@ -121,6 +123,7 @@ extension JSONTokenizer {
   /// Scans _any_ value and calls into the destination
   @_optimize(speed)
   @inlinable
+  @_lifetime(self: copy self)
   public mutating func scanValue() throws(JSONParserError) {
     guard hasMoreData else {
       throw JSONParserError.missingData(line: line, column: column)
@@ -179,6 +182,7 @@ extension JSONTokenizer {
   /// Gets the next byte and advances by 1, doesn't boundary check
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   mutating func nextByte() -> UInt8 {
     let byte = currentByte
     self.advance(1)
@@ -190,6 +194,7 @@ extension JSONTokenizer {
   /// Integers are simpler to parse, so a different parsing strategy may be sed for performance
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   mutating func scanNumber() throws(JSONParserError) {
     var byteLength = 1
     var floating = false
@@ -227,6 +232,7 @@ extension JSONTokenizer {
   /// We don't copy the String out here, this saves performance in many areas
   @_optimize(speed)
   @usableFromInline
+  @_lifetime(self: copy self)
   mutating func scanStringLiteral() throws(JSONParserError) {
     if currentByte != .quote {
       throw JSONParserError.unexpectedToken(
