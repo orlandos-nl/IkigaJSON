@@ -139,7 +139,7 @@ extension JSONTokenizer {
     case .squareLeft:
       try scanArray()
     case .f:  // false
-      guard count > 5 else {
+      guard count >= 5 else {
         throw JSONParserError.missingData(line: line, column: column)
       }
 
@@ -150,7 +150,7 @@ extension JSONTokenizer {
       advance(5)
       destination.booleanFalseFound(.init(start: .init(byteIndex: currentOffset)))
     case .t:  // true
-      guard count > 4 else {
+      guard count >= 4 else {
         throw JSONParserError.missingData(line: line, column: column)
       }
 
@@ -161,7 +161,7 @@ extension JSONTokenizer {
       advance(4)
       destination.booleanTrueFound(.init(start: .init(byteIndex: currentOffset)))
     case .n:  // null
-      guard count > 4 else {
+      guard count >= 4 else {
         throw JSONParserError.missingData(line: line, column: column)
       }
 

@@ -1718,4 +1718,28 @@ final class IkigaJSONTests: XCTestCase {
     XCTAssertThrowsError(
       try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0}"#)))
   }
+
+  func testRootLevelPrimitiveDecoding() throws {
+    let decoder = IkigaJSONDecoder()
+
+    // Test root-level null decoding
+    let nullValue = try decoder.decode(String?.self, from: "null".data(using: .utf8)!)
+    XCTAssertNil(nullValue)
+
+    // Test root-level true decoding
+    let trueValue = try decoder.decode(Bool.self, from: "true".data(using: .utf8)!)
+    XCTAssertTrue(trueValue)
+
+    // Test root-level false decoding
+    let falseValue = try decoder.decode(Bool.self, from: "false".data(using: .utf8)!)
+    XCTAssertFalse(falseValue)
+
+    // Test root-level integer decoding
+    let intValue = try decoder.decode(Int.self, from: "42".data(using: .utf8)!)
+    XCTAssertEqual(intValue, 42)
+
+    // Test root-level string decoding
+    let stringValue = try decoder.decode(String.self, from: "\"hello\"".data(using: .utf8)!)
+    XCTAssertEqual(stringValue, "hello")
+  }
 }
