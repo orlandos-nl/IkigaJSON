@@ -210,11 +210,11 @@ cd Benchmarks/JSONBenchmark && swift package benchmark
 
 **Encoding Performance (p50 wall clock time)**
 
-| Payload Size | Foundation | IkigaJSON | Winner |
-|:-------------|:-----------|:----------|:-------|
-| Small (~100 bytes) | 3.75 μs | 3.13 μs | IkigaJSON (1.2x) |
-| Medium (~400 bytes) | 6.96 μs | 5.63 μs | IkigaJSON (1.2x) |
-| Large (~17 KB) | 382 μs | 282 μs | IkigaJSON (1.4x) |
+| Payload Size | Foundation | IkigaJSON |
+|:-------------|:-----------|:----------|
+| Small (~100 bytes) | 3.75 μs | 3.13 μs |
+| Medium (~400 bytes) | 6.96 μs | 5.63 μs |
+| Large (~17 KB) | 382 μs | 282 μs |
 
 **Decoding Performance (p50 wall clock time)**
 
