@@ -43,8 +43,8 @@ let package = Package(
     .target(
       name: "_NIOJSON",
       dependencies: [
-        .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["FoundationSupport"])),
-        .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["FoundationSupport"])),
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOFoundationCompat", package: "swift-nio"),
         .target(name: "_JSONCore"),
       ]
     ),
