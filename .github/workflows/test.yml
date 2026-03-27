@@ -57,3 +57,100 @@ jobs:
         uses: actions/checkout@v2
       - name: Build for Embedded Swift
         run: swift build -c release --target _JSONCore -Xswiftc -enable-experimental-feature -Xswiftc Embedded -Xswiftc -wmo
+  # Regression test for https://github.com/orlandos-nl/IkigaJSON/issues/59
+  # Verifies that a downstream package can depend on both swift-nio and IkigaJSON
+  # without module resolution failures (e.g. _AtomicsShims not found)
+  test-downstream-integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - swift:6.2
+          - swiftlang/swift:nightly-6.3-jammy
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - name: Check out IkigaJSON
+        uses: actions/checkout@v2
+        with:
+          path: IkigaJSON
+      - name: Create downstream package (NIO + IkigaJSON)
+        run: |
+          mkdir downstream-test
+          cat > downstream-test/Package.swift << 'PKGEOF'
+          // swift-tools-version: 6.2
+          import PackageDescription
+
+          let package = Package(
+            name: "DownstreamTest",
+            dependencies: [
+              .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+              .package(path: "../IkigaJSON"),
+            ],
+            targets: [
+              .executableTarget(
+                name: "DownstreamTest",
+                dependencies: [
+                  .product(name: "NIOCore", package: "swift-nio"),
+                  .product(name: "IkigaJSON", package: "IkigaJSON"),
+                ]
+              )
+            ]
+          )
+          PKGEOF
+          mkdir -p downstream-test/Sources/DownstreamTest
+          cat > downstream-test/Sources/DownstreamTest/main.swift << 'SRCEOF'
+          import NIOCore
+          import IkigaJSON
+
+          let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+          defer { try! group.syncShutdownGracefully() }
+
+          struct Point: Decodable { let x: Int; let y: Int }
+          let decoder = IkigaJSONDecoder()
+          let data = Data(#"{"x":1,"y":2}"#.utf8)
+          let point = try decoder.decode(Point.self, from: data)
+          assert(point.x == 1 && point.y == 2)
+          print("OK")
+          SRCEOF
+      - name: Build downstream package (ByteBufferSupport enabled, default)
+        run: cd downstream-test && swift build -c release
+      - name: Create downstream package (no ByteBufferSupport)
+        run: |
+          mkdir downstream-test-no-nio
+          cat > downstream-test-no-nio/Package.swift << 'PKGEOF'
+          // swift-tools-version: 6.2
+          import PackageDescription
+
+          let package = Package(
+            name: "DownstreamTestNoNIO",
+            dependencies: [
+              .package(path: "../IkigaJSON"),
+            ],
+            targets: [
+              .executableTarget(
+                name: "DownstreamTestNoNIO",
+                dependencies: [
+                  .product(
+                    name: "IkigaJSON",
+                    package: "IkigaJSON",
+                    traits: ["FoundationSupport"]
+                  ),
+                ]
+              )
+            ]
+          )
+          PKGEOF
+          mkdir -p downstream-test-no-nio/Sources/DownstreamTestNoNIO
+          cat > downstream-test-no-nio/Sources/DownstreamTestNoNIO/main.swift << 'SRCEOF'
+          import IkigaJSON
+
+          struct Point: Decodable { let x: Int; let y: Int }
+          let decoder = IkigaJSONDecoder()
+          let data = Data(#"{"x":1,"y":2}"#.utf8)
+          let point = try decoder.decode(Point.self, from: data)
+          assert(point.x == 1 && point.y == 2)
+          print("OK")
+          SRCEOF
+      - name: Build downstream package (ByteBufferSupport disabled)
+        run: cd downstream-test-no-nio && swift build -c release
