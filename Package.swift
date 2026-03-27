@@ -21,6 +21,9 @@ let package = Package(
       targets: ["_JSONCore"]
     ),
   ],
+  traits: [
+    .trait(name: "FoundationSupport", enabledTraits: [])
+  ],
   dependencies: [
     // Dependencies declare other packages that this package depends on.
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0")
@@ -38,17 +41,20 @@ let package = Package(
     .target(
       name: "_NIOJSON",
       dependencies: [
-        .product(name: "NIOCore", package: "swift-nio"),
-        .product(name: "NIOFoundationCompat", package: "swift-nio"),
+        .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["FoundationSupport"])),
+        .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["FoundationSupport"])),
         .target(name: "_JSONCore"),
       ]
     ),
     .target(
       name: "IkigaJSON",
       dependencies: [
-        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["FoundationSupport"])),
         .target(name: "_JSONCore"),
-        .target(name: "_NIOJSON"),
+        .target(name: "_NIOJSON", condition: .when(traits: ["FoundationSupport"])),
+      ],
+      swiftSettings: [
+        .define("FOUNDATION_SUPPORT", .when(traits: ["FoundationSupport"])),
       ]
     ),
     .testTarget(

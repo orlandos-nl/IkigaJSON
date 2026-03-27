@@ -122,17 +122,13 @@ jobs:
           let package = Package(
             name: "DownstreamTestNoNIO",
             dependencies: [
-              .package(path: "../IkigaJSON"),
+              .package(path: "../IkigaJSON", traits: ["FoundationSupport"]),
             ],
             targets: [
               .executableTarget(
                 name: "DownstreamTestNoNIO",
                 dependencies: [
-                  .product(
-                    name: "IkigaJSON",
-                    package: "IkigaJSON",
-                    traits: ["FoundationSupport"]
-                  ),
+                  .product(name: "IkigaJSON", package: "IkigaJSON"),
                 ]
               )
             ]
@@ -140,6 +136,7 @@ jobs:
           PKGEOF
           mkdir -p downstream-test-no-nio/Sources/DownstreamTestNoNIO
           cat > downstream-test-no-nio/Sources/DownstreamTestNoNIO/main.swift << 'SRCEOF'
+          import Foundation
           import IkigaJSON
 
           struct Point: Decodable { let x: Int; let y: Int }
