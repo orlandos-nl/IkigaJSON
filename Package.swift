@@ -1,4 +1,4 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.1
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -22,7 +22,8 @@ let package = Package(
     ),
   ],
   traits: [
-    .trait(name: "FoundationSupport", enabledTraits: [])
+    .trait(name: "FoundationSupport"),
+    .default(enabledTraits: ["FoundationSupport"]),
   ],
   dependencies: [
     // Dependencies declare other packages that this package depends on.
@@ -36,6 +37,7 @@ let package = Package(
       swiftSettings: [
         // Enable strict concurrency for Embedded Swift compatibility
         .enableExperimentalFeature("StrictConcurrency"),
+        .enableExperimentalFeature("Lifetimes"),
       ]
     ),
     .target(
