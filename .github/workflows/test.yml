@@ -122,7 +122,7 @@ jobs:
           let package = Package(
             name: "DownstreamTestNoNIO",
             dependencies: [
-              .package(path: "../IkigaJSON", traits: ["FoundationSupport"]),
+              .package(path: "../IkigaJSON"),
             ],
             targets: [
               .executableTarget(
