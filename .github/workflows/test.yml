@@ -103,13 +103,10 @@ jobs:
           import NIOCore
           import IkigaJSON
 
-          let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-          defer { try! group.syncShutdownGracefully() }
-
           struct Point: Decodable { let x: Int; let y: Int }
           let decoder = IkigaJSONDecoder()
-          let data = Data(#"{"x":1,"y":2}"#.utf8)
-          let point = try decoder.decode(Point.self, from: data)
+          let buffer = ByteBuffer(string: #"{"x":1,"y":2}"#)
+          let point = try decoder.decode(Point.self, from: buffer)
           assert(point.x == 1 && point.y == 2)
           print("OK")
           SRCEOF
