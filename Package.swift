@@ -55,9 +55,6 @@ let package = Package(
         .target(name: "_JSONCore"),
         .target(name: "_NIOJSON", condition: .when(traits: ["FoundationSupport"])),
       ],
-      swiftSettings: [
-        .define("FOUNDATION_SUPPORT", .when(traits: ["FoundationSupport"])),
-      ]
     ),
     .testTarget(
       name: "IkigaJSONTests",
