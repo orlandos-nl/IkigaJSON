@@ -96,6 +96,17 @@ final class IkigaJSONTests: XCTestCase {
     }
   }
 
+  func testEscapedQuoteAtStartOfValue() throws {
+    // Regression test: alignment phase of SWAR scanner was returning early on escaped quotes
+    let json = #"{"content":"\"fantastic resort\" Great hotel"}"#.data(using: .utf8)!
+    let result = try IkigaJSONDecoder().decode([String: String].self, from: json)
+    XCTAssertEqual(result["content"], #""fantastic resort" Great hotel"#)
+
+    // Nested in array, matching the travel-sample pattern from issue #60
+    let json2 = #"[{"author":"snej","date":"2013-03-08 03:22:59 +0300"},{"content":"\"fantastic resort\" Great hotel"}]"#.data(using: .utf8)!
+    XCTAssertNoThrow(try IkigaJSONDecoder().decode([[String: String]].self, from: json2))
+  }
+
   func testEscapedUnicodeWeis() throws {
     do {
       let json: Data = #"{"foo":"\u0022wei\u00DF\u0022"}"#.data(using: .utf8)!

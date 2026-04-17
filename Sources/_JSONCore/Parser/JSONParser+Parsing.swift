@@ -258,8 +258,21 @@ extension JSONTokenizer {
       while i < min(alignedStart, searchEnd) {
         let byte = buffer[i]
         if byte == .quote {
-          // Found unescaped quote - string ends here
-          return (i - currentOffset, didEscape, true)
+          var escaped = false
+          if didEscape {
+            var backwardsOffset = i &- 1
+            while backwardsOffset >= searchStart &- 1 {
+              if buffer[backwardsOffset] == .backslash {
+                escaped = !escaped
+                backwardsOffset &-= 1
+              } else {
+                break
+              }
+            }
+          }
+          if !escaped {
+            return (i - currentOffset, didEscape, true)
+          }
         } else if byte == .backslash {
           didEscape = true
         }
