@@ -25,7 +25,7 @@ extension UInt8 {
 extension JSONToken.String {
   /// Makes a String from a Span.
   /// Assumes the length is checked against the bounds `self`
-  func makeString(from span: Span<UInt8>, unicode: Bool) -> String? {
+  public func makeString(from span: Span<UInt8>, unicode: Bool) -> String? {
     let startOffset = start.byteOffset
 
     if usesEscaping {
@@ -125,7 +125,7 @@ extension JSONToken.String {
 extension JSONToken.String {
   /// Makes a String from an Array.
   /// Assumes the length is checked against the bounds `self`
-  func makeString(from bytes: [UInt8], unicode: Bool) -> String? {
+  public func makeString(from bytes: [UInt8], unicode: Bool) -> String? {
     let startOffset = start.byteOffset
 
     if usesEscaping {
