@@ -50,7 +50,7 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
             throw JSONObjectError.parsingError(error)
         }
         
-        guard jsonDescription.topLevelType == .array else {
+        guard jsonDescription.topLevelType == .object else {
             throw JSONObjectError.expectedObject
         }
         
