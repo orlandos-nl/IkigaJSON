@@ -58,6 +58,16 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
         self.jsonDescription = jsonDescription
     }
     
+    @_lifetime(borrow span)
+    internal init(span: Span<UInt8>, jsonDescription: JSONDescription) throws(JSONObjectError) {
+        guard jsonDescription.topLevelType == .object else {
+            throw JSONObjectError.expectedObject
+        }
+        
+        self.span = span
+        self.jsonDescription = jsonDescription
+    }
+    
     public func string(forKey key: String) throws -> String? {
         guard
             let (_, offset) = jsonDescription.valueOffset(
@@ -171,7 +181,7 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
         subDescription.advanceAllJSONOffsets(by: -jsonBounds.offset)
         
         let subSpan = span.extracting(Int(jsonBounds.offset) ..< Int(jsonBounds.offset + jsonBounds.length))
-        let view = try JSONObjectView(span: subSpan)
+        let view = try JSONObjectView(span: subSpan, jsonDescription: subDescription)
         return try perform(view)
     }
     
@@ -194,7 +204,7 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
         subDescription.advanceAllJSONOffsets(by: -jsonBounds.offset)
         
         let subSpan = span.extracting(Int(jsonBounds.offset) ..< Int(jsonBounds.offset + jsonBounds.length))
-        let view = try JSONArrayView(span: subSpan)
+        let view = try JSONArrayView(span: subSpan, jsonDescription: subDescription)
         return try perform(view)
     }
     
