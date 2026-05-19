@@ -212,28 +212,28 @@ cd Benchmarks/JSONBenchmark && swift package benchmark
 
 | Payload Size | Foundation | IkigaJSON |
 |:-------------|:-----------|:----------|
-| Small (~100 bytes) | 3.75 μs | 3.13 μs |
-| Medium (~400 bytes) | 6.96 μs | 5.63 μs |
-| Large (~17 KB) | 382 μs | 282 μs |
+| Small (~100 bytes) | 3.54 μs | 3.21 μs |
+| Medium (~400 bytes) | 6.30 μs | 6.17 μs |
+| Large (~27 KB) | 300 μs | 329 μs |
 
 **Decoding Performance (p50 wall clock time)**
 
 | Payload Size | Foundation | IkigaJSON |
 |:-------------|:-----------|:----------|
-| Small (~100 bytes) | 5.00 μs | 5.75 μs |
-| Medium (~400 bytes) | 11 μs | 34 μs |
-| Large (~17 KB) | 416 μs | 37 ms |
+| Small (~100 bytes) | 3.88 μs | 3.79 μs |
+| Medium (~400 bytes) | 8.26 μs | 9.05 μs |
+| Large (~27 KB) | 381 μs | 556 μs |
 
 **Memory Allocations (malloc count)**
 
 | Operation | Foundation | IkigaJSON |
 |:----------|:-----------|:----------|
-| Decode Small | 15 | 25 |
-| Decode Medium | 33 | 285 |
-| Encode Small | 14 | 15 |
-| Encode Medium | 24 | 42 |
+| Decode Small | 15 | 10 |
+| Decode Medium | 33 | 26 |
+| Encode Small | 14 | 14 |
+| Encode Medium | 24 | 40 |
 
-IkigaJSON excels at encoding tasks and provides efficient APIs for working with raw JSON data (JSONObject, JSONArray) without full decoding overhead.
+IkigaJSON is competitive with Foundation in throughput for small and medium payloads. Its main advantage is fewer memory allocations for decoding — useful in high-throughput scenarios where allocation pressure matters. For raw JSON access without full decoding (JSONObject, JSONArray), IkigaJSON avoids re-parsing entirely.
 
 ### Support
 
