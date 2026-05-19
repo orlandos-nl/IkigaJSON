@@ -903,11 +903,13 @@ extension JSONDescriptionProtocol {
       if !convertingSnakeCasing {
         if bounds.length == keySize {
           var matches = true
+          var keyIdx = keyBytes.startIndex
           for i in 0..<keySize {
-              if span[Int(bounds.offset) + i] != keyBytes[keyBytes.index(keyBytes.startIndex, offsetBy: i)] {
+            if span[Int(bounds.offset) + i] != keyBytes[keyIdx] {
               matches = false
               break
             }
+            keyBytes.formIndex(after: &keyIdx)
           }
           if matches {
             return (index, offset)
@@ -1225,46 +1227,38 @@ extension JSONDescriptionProtocol {
   func processEscapedString(_ bytes: some Collection<UInt8>, convertingSnakeCasing: Bool) -> String? {
     var result = [UInt8]()
     result.reserveCapacity(bytes.count)
-    var i = 0
+    var idx = bytes.startIndex
 
-    while i < bytes.count {
-        var byte = bytes[bytes.index(bytes.startIndex, offsetBy: i)]
+    while idx < bytes.endIndex {
+      let byte = bytes[idx]
+      bytes.formIndex(after: &idx)
 
-      if byte != .backslash || i + 1 >= bytes.count {
+      if byte != .backslash || idx >= bytes.endIndex {
         result.append(byte)
-        i += 1
         continue
       }
 
-      i += 1
-        byte = bytes[bytes.index(bytes.startIndex, offsetBy: i)]
-      switch byte {
+      let escaped = bytes[idx]
+      bytes.formIndex(after: &idx)
+      switch escaped {
       case .backslash, .solidus, .quote:
-        result.append(byte)
-        i += 1
+        result.append(escaped)
       case .t:
         result.append(.tab)
-        i += 1
       case .r:
         result.append(.carriageReturn)
-        i += 1
       case .n:
         result.append(.newLine)
-        i += 1
       case .f:
         result.append(.formFeed)
-        i += 1
       case .b:
         result.append(.backspace)
-        i += 1
       case .u:
-        // Unicode escape sequence
-        guard i + 4 < bytes.count else {
+        // Unicode escape sequence: \uXXXX
+        guard bytes.distance(from: idx, to: bytes.endIndex) >= 4 else {
           return nil
         }
-        // For simplicity, just skip the unicode escape - this is a simplified implementation
-        // A full implementation would decode the unicode and append UTF-8 bytes
-        i += 5
+        for _ in 0..<4 { bytes.formIndex(after: &idx) }
       default:
         return nil
       }

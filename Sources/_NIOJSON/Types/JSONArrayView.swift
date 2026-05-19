@@ -298,7 +298,7 @@ public struct JSONArrayView: ~Copyable, ~Escapable {
     }
   }
 
-  public subscript(index: Int) -> JSONValue {
+  public subscript(index: Int) -> any JSONValue {
     value(at: index, in: span)
   }
 }
