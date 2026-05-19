@@ -70,13 +70,15 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable, CustomS
     do {
       self.jsonDescription = try unsafe buffer.withSpan { span in
         Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
-          var tokenizer = JSONTokenizer(
-            span: span,
-            destination: JSONDescription()
-          )
-
-          try tokenizer.scanValue()
-          return tokenizer.destination
+            try unsafe span.withUnsafeBufferPointer { buffer throws(JSONParserError) in
+                var tokenizer = unsafe JSONTokenizer(
+                    bytes: buffer,
+                    destination: JSONDescription()
+                )
+                
+                try tokenizer.scanValue()
+                return tokenizer.destination
+            }
         }
       }.get()
     } catch {

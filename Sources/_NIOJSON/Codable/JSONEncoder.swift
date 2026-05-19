@@ -168,10 +168,12 @@ final class SharedEncoderData {
 
   /// Inserts the String's UTF8 bytes into this storage
   func insert(contentsOf string: String, at offset: inout Int) {
-    let utf8 = Array(string.utf8)
+    let utf8 = string.utf8
     ensureCapacity(offset: offset, count: utf8.count)
-    for i in 0..<utf8.count {
-      storage[offset &+ i] = utf8[i]
+    var i = offset
+    for byte in utf8 {
+      storage[i] = byte
+      i &+= 1
     }
     offset = offset &+ utf8.count
   }

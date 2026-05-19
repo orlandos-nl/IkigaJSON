@@ -107,16 +107,19 @@ public struct JSONObject: ExpressibleByDictionaryLiteral, Sequence, Equatable,
     self.jsonBuffer = buffer
 
     do {
-      self.jsonDescription = try unsafe buffer.withSpan { span in
-        Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
-          var tokenizer = JSONTokenizer(
-            span: span,
-            destination: JSONDescription()
-          )
-          try tokenizer.scanValue()
-          return tokenizer.destination
-        }
-      }.get()
+        self.jsonDescription = try unsafe buffer.withSpan { span in
+          Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
+              try unsafe span.withUnsafeBufferPointer { buffer throws(JSONParserError) in
+                  var tokenizer = unsafe JSONTokenizer(
+                      bytes: buffer,
+                      destination: JSONDescription()
+                  )
+                  
+                  try tokenizer.scanValue()
+                  return tokenizer.destination
+              }
+          }
+        }.get()
     } catch {
       throw JSONObjectError.parsingError(error)
     }

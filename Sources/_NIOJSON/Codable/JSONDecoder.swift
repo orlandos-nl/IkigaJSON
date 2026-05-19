@@ -170,9 +170,8 @@ public struct IkigaJSONDecoder: Sendable {
   {
     let bytes = unsafe Array(buffer)
     return try description.withDescription { description in
-      let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-      var parser = JSONTokenizer(
-        span: span,
+      var parser = unsafe JSONTokenizer(
+        bytes: buffer,
         destination: description
       )
       try parser.scanValue()
@@ -217,9 +216,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { buffer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: buffer,
             destination: description
           )
           try parser.scanValue()
@@ -242,9 +240,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { buffer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: buffer,
             destination: description
           )
           try parser.scanValue()
@@ -281,9 +278,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { bufferPointer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: bufferPointer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: bufferPointer,
             destination: description
           )
           try parser.scanValue()
@@ -485,21 +481,23 @@ private final class _JSONDecoder: Decoder {
   }
 
   func decode<D: Decodable>(_ type: D.Type) throws -> D {
-    switch type {
-    case is Date.Type:
+    switch ObjectIdentifier(type) {
+    case ObjectIdentifier(Date.self):
       switch self.settings.dateDecodingStrategy {
       case .deferredToDate:
         break
       case .secondsSince1970:
         let interval = try singleValueContainer().decode(Double.self)
-        return Date(timeIntervalSince1970: interval) as! D
+        let date = Date(timeIntervalSince1970: interval)
+        return unsafe unsafeBitCast(date, to: D.self)
       case .millisecondsSince1970:
         let interval = try singleValueContainer().decode(Double.self)
-        return Date(timeIntervalSince1970: interval / 1000) as! D
+        let date = Date(timeIntervalSince1970: interval / 1000)
+        return unsafe unsafeBitCast(date, to: D.self)
       case .iso8601:
         let string = try singleValueContainer().decode(String.self)
-
-        return try date(from: string) as! D
+        let date = try date(from: string)
+        return unsafe unsafeBitCast(date, to: D.self)
       #if !canImport(FoundationEssentials) || swift(<5.10)
         case .formatted(let formatter):
           let string = try singleValueContainer().decode(String.self)
@@ -508,14 +506,15 @@ private final class _JSONDecoder: Decoder {
             throw JSONDecoderError.invalidDate(string)
           }
 
-          return date as! D
+          return unsafe unsafeBitCast(date, to: D.self)
       #endif
       case .custom(let makeDate):
-        return try makeDate(self) as! D
+        let date = try makeDate(self)
+        return unsafe unsafeBitCast(date, to: D.self)
       @unknown default:
         throw JSONDecoderError.unknownJSONStrategy
       }
-    case is Data.Type:
+    case ObjectIdentifier(Data.self):
       switch self.settings.dataDecodingStrategy {
       case .deferredToData:
         break
@@ -526,23 +525,24 @@ private final class _JSONDecoder: Decoder {
           throw JSONDecoderError.invalidData(string)
         }
 
-        return data as! D
+        return unsafe unsafeBitCast(data, to: D.self)
       case .custom(let makeData):
-        return try makeData(self) as! D
+        let data = try makeData(self)
+        return unsafe unsafeBitCast(data, to: D.self)
       @unknown default:
         throw JSONDecoderError.unknownJSONStrategy
       }
-    case is URL.Type:
+    case ObjectIdentifier(URL.self):
       let string = try singleValueContainer().decode(String.self)
 
       guard let url = URL(string: string) else {
         throw JSONDecoderError.invalidURL(string)
       }
 
-      return url as! D
-    case is Decimal.Type:
+      return unsafe unsafeBitCast(url, to: D.self)
+    case ObjectIdentifier(Decimal.self):
       let double = try singleValueContainer().decode(Double.self)
-      return Decimal(floatLiteral: double) as! D
+      return unsafe unsafeBitCast(Decimal(floatLiteral: double), to: D.self)
     default:
       break
     }
