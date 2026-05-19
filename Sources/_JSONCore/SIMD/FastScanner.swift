@@ -17,7 +17,7 @@ public func findByte(_ target: UInt8, in buffer: UnsafeBufferPointer<UInt8>, fro
   // Align to 8-byte boundary first (process leading bytes one by one)
   let alignedStart = (i + 7) & ~7
   while i < min(alignedStart, count) {
-    if baseAddress[i] == target {
+    if unsafe baseAddress[i] == target {
       return i
     }
     i &+= 1
@@ -25,7 +25,7 @@ public func findByte(_ target: UInt8, in buffer: UnsafeBufferPointer<UInt8>, fro
 
   // Process 8 bytes at a time
   while i &+ 8 <= count {
-    let word = baseAddress.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
+    let word = unsafe baseAddress.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { unsafe $0.pointee }
 
     // XOR with target broadcast to all bytes - matching bytes become 0x00
     let xored = word ^ target64
@@ -45,7 +45,7 @@ public func findByte(_ target: UInt8, in buffer: UnsafeBufferPointer<UInt8>, fro
 
   // Process remaining bytes
   while i < count {
-    if baseAddress[i] == target {
+    if unsafe baseAddress[i] == target {
       return i
     }
     i &+= 1
@@ -71,7 +71,7 @@ public func findEitherByte(_ target1: UInt8, _ target2: UInt8, in buffer: Unsafe
   // Align to 8-byte boundary
   let alignedStart = (i + 7) & ~7
   while i < min(alignedStart, count) {
-    let byte = baseAddress[i]
+    let byte = unsafe baseAddress[i]
     if byte == target1 || byte == target2 {
       return i
     }
@@ -80,7 +80,7 @@ public func findEitherByte(_ target1: UInt8, _ target2: UInt8, in buffer: Unsafe
 
   // Process 8 bytes at a time
   while i &+ 8 <= count {
-    let word = baseAddress.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
+    let word = unsafe baseAddress.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { unsafe $0.pointee }
 
     // Check for target1
     let xored1 = word ^ t1_64
@@ -102,7 +102,7 @@ public func findEitherByte(_ target1: UInt8, _ target2: UInt8, in buffer: Unsafe
 
   // Process remaining bytes
   while i < count {
-    let byte = baseAddress[i]
+    let byte = unsafe baseAddress[i]
     if byte == target1 || byte == target2 {
       return i
     }
@@ -129,7 +129,7 @@ public func countLeadingWhitespace(in buffer: UnsafeBufferPointer<UInt8>, from o
   // Align to 8-byte boundary first
   let alignedStart = (i + 7) & ~7
   while i < min(alignedStart, count) {
-    let byte = baseAddress[i]
+    let byte = unsafe baseAddress[i]
     if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
       return i - offset
     }
@@ -144,9 +144,8 @@ public func countLeadingWhitespace(in buffer: UnsafeBufferPointer<UInt8>, from o
   // Process 8 bytes at a time with individual checks (still faster due to better memory access)
   while i &+ 8 <= count {
     // Check if any of the 8 bytes is non-whitespace
-    var foundNonWhitespace = false
     for j in 0..<8 {
-      let byte = baseAddress[i &+ j]
+      let byte = unsafe baseAddress[i &+ j]
       if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
         return (i &+ j) - offset
       }
@@ -156,7 +155,7 @@ public func countLeadingWhitespace(in buffer: UnsafeBufferPointer<UInt8>, from o
 
   // Process remaining bytes
   while i < count {
-    let byte = baseAddress[i]
+    let byte = unsafe baseAddress[i]
     if byte != 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D {
       return i - offset
     }

@@ -107,6 +107,15 @@ final class IkigaJSONTests: XCTestCase {
     XCTAssertNoThrow(try IkigaJSONDecoder().decode([[String: String]].self, from: json2))
   }
 
+    #if os(Linux)
+  func testTravelSampleHotelDocument() throws {
+    // Regression test for issue #60: hotel document from Couchbase travel-sample dataset
+    let url = Bundle.module.url(forResource: "Fixtures/hotel", withExtension: "json")!
+    let data = try Data(contentsOf: url)
+    XCTAssertNoThrow(try JSONObject(data: data))
+  }
+    #endif
+
   func testEscapedUnicodeWeis() throws {
     do {
       let json: Data = #"{"foo":"\u0022wei\u00DF\u0022"}"#.data(using: .utf8)!

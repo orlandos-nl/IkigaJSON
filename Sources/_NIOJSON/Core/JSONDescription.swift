@@ -1135,7 +1135,7 @@ extension JSONDescriptionProtocol {
     var offset = offset
 
     var keys = [String]()
-    keys.reserveCapacity(numericCast(count))
+    keys.reserveCapacity(count)
 
     for _ in 0..<count {
       let bounds = dataBounds(atIndexOffset: offset)

@@ -7,14 +7,14 @@ let package = Package(
     .macOS(.v14)
   ],
   dependencies: [
-    .package(path: "../.."),
+    .package(name: "swift-json", path: "../.."),
     .package(url: "https://github.com/ordo-one/package-benchmark", from: "1.27.0"),
   ],
   targets: [
     .executableTarget(
       name: "JSONBenchmark",
       dependencies: [
-        .product(name: "IkigaJSON", package: "IkigaJSON"),
+        .product(name: "IkigaJSON", package: "swift-json"),
         .product(name: "Benchmark", package: "package-benchmark"),
       ],
       path: ".",

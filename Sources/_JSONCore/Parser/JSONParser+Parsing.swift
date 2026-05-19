@@ -256,13 +256,13 @@ extension JSONTokenizer {
       // Align to 8-byte boundary first
       let alignedStart = (i + 7) & ~7
       while i < min(alignedStart, searchEnd) {
-        let byte = buffer[i]
+        let byte = unsafe buffer[i]
         if byte == .quote {
           var escaped = false
           if didEscape {
             var backwardsOffset = i &- 1
             while backwardsOffset >= searchStart &- 1 {
-              if buffer[backwardsOffset] == .backslash {
+              if unsafe buffer[backwardsOffset] == .backslash {
                 escaped = !escaped
                 backwardsOffset &-= 1
               } else {
@@ -281,7 +281,7 @@ extension JSONTokenizer {
 
       // Process 8 bytes at a time
       while i &+ 8 <= searchEnd {
-        let word = unsafe buffer.baseAddress!.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { $0.pointee }
+          let word = unsafe buffer.baseAddress!.advanced(by: i).withMemoryRebound(to: UInt64.self, capacity: 1) { unsafe $0.pointee }
 
         // Check for quote
         let xoredQuote = word ^ quoteTarget
@@ -296,14 +296,14 @@ extension JSONTokenizer {
         if combined != 0 {
           // Found something - process bytes one by one to handle escaping correctly
           for j in 0..<8 {
-            let byte = buffer[i &+ j]
+            let byte = unsafe buffer[i &+ j]
             if byte == .quote {
               // Check if escaped
               var escaped = false
               if didEscape {
                 var backwardsOffset = (i &+ j) &- 1
                 while backwardsOffset >= searchStart &- 1 {
-                  if buffer[backwardsOffset] == .backslash {
+                  if unsafe buffer[backwardsOffset] == .backslash {
                     escaped = !escaped
                     backwardsOffset &-= 1
                   } else {
@@ -324,14 +324,14 @@ extension JSONTokenizer {
 
       // Process remaining bytes
       while i < searchEnd {
-        let byte = buffer[i]
+        let byte = unsafe buffer[i]
         if byte == .quote {
           // Check if escaped
           var escaped = false
           if didEscape {
             var backwardsOffset = i &- 1
             while backwardsOffset >= searchStart &- 1 {
-              if buffer[backwardsOffset] == .backslash {
+              if unsafe buffer[backwardsOffset] == .backslash {
                 escaped = !escaped
                 backwardsOffset &-= 1
               } else {

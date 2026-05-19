@@ -110,12 +110,20 @@ extension JSONToken.String {
 
       flushUnicodes()
       return String(decoding: buffer, as: Unicode.UTF8.self)
-    } else {
+    } else if #available(macOS 26.0, *) {
       // No escaping, use withUnsafeBufferPointer for efficient string creation
-      return unsafe span.withUnsafeBytes { buffer in
-        let slice = unsafe UnsafeRawBufferPointer(rebasing: buffer[startOffset..<(startOffset + byteLength)])
-        return String(decoding: slice, as: Unicode.UTF8.self)
-      }
+        do {
+            let subSpan = span.extracting(startOffset ..< startOffset + byteLength)
+            let utf8 = try UTF8Span(validating: subSpan)
+            return String(copying: utf8)
+        } catch {
+            return nil
+        }
+    } else {
+        return unsafe span.withUnsafeBytes { buffer in
+          let slice = unsafe UnsafeRawBufferPointer(rebasing: buffer[startOffset..<(startOffset + byteLength)])
+          return unsafe String(decoding: slice, as: Unicode.UTF8.self)
+        }
     }
   }
 }

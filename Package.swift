@@ -58,6 +58,7 @@ let package = Package(
     ),
     .testTarget(
       name: "IkigaJSONTests",
-      dependencies: [.target(name: "IkigaJSON")]),
+      dependencies: [.target(name: "IkigaJSON")],
+      resources: [.copy("Fixtures")]),
   ]
 )
