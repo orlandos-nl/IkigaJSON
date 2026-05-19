@@ -3,7 +3,7 @@ import NIOCore
 import _JSONCore
 
 package protocol JSONDescriptionProtocol {
-  var storage: [UInt8] { get }
+  var storage: ArraySlice<UInt8> { get }
   var writtenBytes: Int { get }
 }
 
@@ -19,7 +19,7 @@ extension JSONDescriptionProtocol {
     // Read bytes in little-endian order and construct the integer
     var result: T = 0
     for i in 0..<size {
-      result |= T(storage[index + i]) << (i * 8)
+        result |= T(storage[storage.startIndex + index + i]) << (i * 8)
     }
     return result
   }
@@ -32,8 +32,8 @@ package struct JSONDescriptionView: JSONDescriptionProtocol {
   let _offset: UInt32
   @inlinable
   var offset: Int { return Int(self._offset) }
-  package var storage: [UInt8] {
-    Array(description.storage[offset...])
+  package var storage: ArraySlice<UInt8> {
+    description.storage[offset...]
   }
   package var writtenBytes: Int {
     description.writtenBytes - offset
@@ -57,7 +57,10 @@ package struct JSONDescriptionView: JSONDescriptionProtocol {
 /// - ChildrenLength is a Int32 with the length of all child indexes
 @usableFromInline
 package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionProtocol {
-  @usableFromInline package var storage: [UInt8]
+  @usableFromInline package var _storage: [UInt8]
+    @usableFromInline package var storage: ArraySlice<UInt8> {
+        _storage[...]
+    }
 
   @usableFromInline
   package private(set) var writtenBytes: Int = 0
@@ -83,7 +86,7 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
 
     // Write bytes in little-endian order
     for i in 0..<size {
-      storage[index + i] = UInt8(truncatingIfNeeded: integer >> (i * 8))
+      _storage[index + i] = UInt8(truncatingIfNeeded: integer >> (i * 8))
     }
     return size
   }
@@ -94,8 +97,8 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
     ensureWritableRoom(for: offset + jsonDescription.writtenBytes)
 
     // Copy bytes from source to destination
-    for i in 0..<jsonDescription.writtenBytes {
-      storage[offset + i] = jsonDescription.storage[i]
+      for i in jsonDescription.storage.startIndex ..< jsonDescription.storage.startIndex + jsonDescription.writtenBytes {
+        _storage[offset + i] = jsonDescription.storage[i]
     }
   }
 
@@ -105,8 +108,8 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
 
     // Copy bytes from source
     let destRange = writtenBytes..<(writtenBytes + jsonDescription.writtenBytes)
-    let sourceSlice = jsonDescription.storage[0..<jsonDescription.writtenBytes]
-    storage.replaceSubrange(destRange, with: sourceSlice)
+      let sourceSlice = jsonDescription.storage[jsonDescription.storage.startIndex..<jsonDescription.storage.startIndex + jsonDescription.writtenBytes]
+      _storage.replaceSubrange(destRange, with: sourceSlice)
     writtenBytes += jsonDescription.writtenBytes
   }
 
@@ -122,7 +125,7 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   func expand(minimumCapacity: Int) {
     let newSize = max(storage.count * 2, minimumCapacity)
     let currentCount = storage.count
-    storage.append(contentsOf: repeatElement(0 as UInt8, count: newSize - currentCount))
+      _storage.append(contentsOf: repeatElement(0 as UInt8, count: newSize - currentCount))
   }
 
   func reset() {
@@ -200,7 +203,7 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   func slice(from offset: Int, length: Int) -> JSONDescription {
     let copy = JSONDescription(size: length)
     // Bulk copy using replaceSubrange (much faster than byte-by-byte loop)
-    copy.storage.replaceSubrange(0..<length, with: storage[offset..<(offset + length)])
+    copy._storage.replaceSubrange(0..<length, with: storage[offset..<(offset + length)])
     copy.writtenBytes = length
     return copy
   }
@@ -208,7 +211,7 @@ package final class JSONDescription: JSONTokenizerDestination, JSONDescriptionPr
   /// Creates a new JSONDescription
   @inlinable
   init(size: Int = 4096) {
-    self.storage = [UInt8](repeating: 0, count: size)
+    self._storage = [UInt8](repeating: 0, count: size)
   }
 }
 
@@ -281,12 +284,12 @@ extension JSONDescription {
       if diff > 0 {
         // Moving forward: work backwards to avoid overwriting
         for i in stride(from: remainder - 1, through: 0, by: -1) {
-          storage[endIndex + diff + i] = storage[endIndex + i]
+            _storage[endIndex + diff + i] = storage[endIndex + i]
         }
       } else {
         // Moving backward: work forwards
         for i in 0..<remainder {
-          storage[endIndex + diff + i] = storage[endIndex + i]
+            _storage[endIndex + diff + i] = storage[endIndex + i]
         }
       }
     }
@@ -358,7 +361,7 @@ extension JSONDescriptionProtocol {
   func type(atOffset offset: Int) -> JSONType {
     assert(offset < writtenBytes)
 
-    guard offset < storage.count, let type = JSONType(rawValue: storage[offset])
+      guard offset < storage.endIndex, let type = JSONType(rawValue: storage[storage.startIndex + offset])
     else {
       fatalError(
         "The JSON index is corrupt. No JSON Type could be found at offset \(offset). Please file a bug report on Github."
@@ -837,16 +840,15 @@ extension JSONDescriptionProtocol {
   }
 
   private func snakeCasedEqual(
-    codingKey: [UInt8],
-    snakeCasedKey: [UInt8]
+    codingKey: some Collection<UInt8>,
+    snakeCasedKey newKey: inout [UInt8]
   ) -> Bool {
-    var newKey = snakeCasedKey
     removeSnakeCasing(from: &newKey)
     guard newKey.count == codingKey.count else {
       return false
     }
 
-    return newKey == codingKey
+      return newKey.elementsEqual(codingKey)
   }
 
   @inlinable
@@ -890,7 +892,7 @@ extension JSONDescriptionProtocol {
       return nil
     }
 
-    let keyBytes = Array(key.utf8)
+    let keyBytes = key.utf8
     let keySize = keyBytes.count
 
     for _ in 0..<count {
@@ -902,7 +904,7 @@ extension JSONDescriptionProtocol {
         if bounds.length == keySize {
           var matches = true
           for i in 0..<keySize {
-            if span[Int(bounds.offset) + i] != keyBytes[i] {
+              if span[Int(bounds.offset) + i] != keyBytes[keyBytes.index(keyBytes.startIndex, offsetBy: i)] {
               matches = false
               break
             }
@@ -919,7 +921,7 @@ extension JSONDescriptionProtocol {
         for i in 0..<Int(bounds.length) {
           spanKeyBytes.append(span[Int(bounds.offset) + i])
         }
-        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: spanKeyBytes) {
+        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: &spanKeyBytes) {
           return (index, offset)
         }
       }
@@ -954,7 +956,7 @@ extension JSONDescriptionProtocol {
       return nil
     }
 
-    let keyBytes = Array(key.utf8)
+    let keyBytes = key.utf8
     let keySize = keyBytes.count
 
     for _ in 0..<count {
@@ -976,8 +978,8 @@ extension JSONDescriptionProtocol {
         // For snake case conversion, extract slice and compare
         let start = Int(bounds.offset)
         let end = start + Int(bounds.length)
-        let jsonKeySlice = Array(bytes[start..<end])
-        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: jsonKeySlice) {
+        var jsonKeySlice = Array(bytes[start..<end])
+        if snakeCasedEqual(codingKey: keyBytes, snakeCasedKey: &jsonKeySlice) {
           return (index, offset)
         }
       }
@@ -1194,7 +1196,7 @@ extension JSONDescriptionProtocol {
 
       let key: String?
       if usesEscaping {
-        let keyBytes = Array(bytes[keyStart..<(keyStart + keyLength)])
+        let keyBytes = bytes[keyStart..<(keyStart + keyLength)]
         key = processEscapedString(keyBytes, convertingSnakeCasing: convertingSnakeCasing)
       } else if convertingSnakeCasing {
         var keyBytes = Array(bytes[keyStart..<(keyStart + keyLength)])
@@ -1220,13 +1222,13 @@ extension JSONDescriptionProtocol {
   }
 
   @usableFromInline
-  func processEscapedString(_ bytes: [UInt8], convertingSnakeCasing: Bool) -> String? {
+  func processEscapedString(_ bytes: some Collection<UInt8>, convertingSnakeCasing: Bool) -> String? {
     var result = [UInt8]()
     result.reserveCapacity(bytes.count)
     var i = 0
 
     while i < bytes.count {
-      let byte = bytes[i]
+        var byte = bytes[bytes.index(bytes.startIndex, offsetBy: i)]
 
       if byte != .backslash || i + 1 >= bytes.count {
         result.append(byte)
@@ -1235,10 +1237,10 @@ extension JSONDescriptionProtocol {
       }
 
       i += 1
-
-      switch bytes[i] {
+        byte = bytes[bytes.index(bytes.startIndex, offsetBy: i)]
+      switch byte {
       case .backslash, .solidus, .quote:
-        result.append(bytes[i])
+        result.append(byte)
         i += 1
       case .t:
         result.append(.tab)
