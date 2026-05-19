@@ -241,11 +241,11 @@ extension JSONTokenizer {
 
     // Fast path: scan 8 bytes at a time looking for " or \
     let searchStart = currentOffset &+ 1
-    let searchEnd = bytes.count
+    let searchEnd = unsafe bytes.count
 
     // Use closure only to find the string end index, return results outside
     // to avoid overlapping access errors with self mutation
-    let result: (foundIndex: Int, didEscape: Bool, found: Bool) = unsafe bytes.withUnsafeBufferPointer { buffer in
+    let result: (foundIndex: Int, didEscape: Bool, found: Bool) = unsafe { [buffer = bytes] in
       // Broadcast targets to all bytes in 64-bit words
       let quoteTarget: UInt64 = 0x2222222222222222  // " = 0x22
       let backslashTarget: UInt64 = 0x5C5C5C5C5C5C5C5C  // \ = 0x5C
@@ -350,7 +350,7 @@ extension JSONTokenizer {
 
       // String not terminated
       return (searchEnd - currentOffset, didEscape, false)
-    }
+    }()
 
     guard result.found else {
       throw JSONParserError.missingData(line: line, column: column)

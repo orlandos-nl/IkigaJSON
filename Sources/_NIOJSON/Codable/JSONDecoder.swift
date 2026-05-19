@@ -170,9 +170,8 @@ public struct IkigaJSONDecoder: Sendable {
   {
     let bytes = unsafe Array(buffer)
     return try description.withDescription { description in
-      let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-      var parser = JSONTokenizer(
-        span: span,
+      var parser = unsafe JSONTokenizer(
+        bytes: buffer,
         destination: description
       )
       try parser.scanValue()
@@ -217,9 +216,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { buffer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: buffer,
             destination: description
           )
           try parser.scanValue()
@@ -242,9 +240,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { buffer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: buffer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: buffer,
             destination: description
           )
           try parser.scanValue()
@@ -281,9 +278,8 @@ public struct IkigaJSONDecoder: Sendable {
     return try description.withDescription { description in
       unsafe bytes.withUnsafeBufferPointer { bufferPointer in
         Result<D, any Error> {
-          let span = unsafe Span<UInt8>(_unsafeElements: bufferPointer)
-          var parser = JSONTokenizer(
-            span: span,
+          var parser = unsafe JSONTokenizer(
+            bytes: bufferPointer,
             destination: description
           )
           try parser.scanValue()

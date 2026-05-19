@@ -38,13 +38,15 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
     public init(span: Span<UInt8>) throws(JSONObjectError) {
         let jsonDescription: JSONDescription
         do {
-            jsonDescription = try Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
-                var tokenizer = JSONTokenizer(
-                    span: span,
-                    destination: JSONDescription()
-                )
-                try tokenizer.scanValue()
-                return tokenizer.destination
+            jsonDescription = try unsafe span.withUnsafeBufferPointer { buffer in
+                Result<JSONDescription, JSONParserError> { () throws(JSONParserError) -> JSONDescription in
+                    var tokenizer = unsafe JSONTokenizer(
+                        bytes: buffer,
+                        destination: JSONDescription()
+                    )
+                    try tokenizer.scanValue()
+                    return tokenizer.destination
+                }
             }.get()
         } catch {
             throw JSONObjectError.parsingError(error)

@@ -1,14 +1,15 @@
 /// This type is responsible for creating a JSONDescription for an inputted JSON buffer
+@safe
 public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~Escapable {
   /// Creates a new JSONParser and initializes it
-  @_lifetime(copy span)
-  public init(
-    span: Span<UInt8>,
-    destination: Destination
-  ) {
-    self.bytes = span
-    self.destination = destination
-  }
+//  @_lifetime(copy span)
+//  public init(
+//    span: Span<UInt8>,
+//    destination: Destination
+//  ) {
+//    self.bytes = span
+//    self.destination = destination
+//  }
 
   /// Creates a new JSONParser and initializes it
   ///
@@ -18,10 +19,10 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
   @_lifetime(borrow bytes)
   @unsafe
   public init(
-    bytes: borrowing UnsafeBufferPointer<UInt8>,
+    bytes: UnsafeBufferPointer<UInt8>,
     destination: Destination
   ) {
-    self.bytes = unsafe Span(_unsafeElements: bytes)
+      unsafe self.bytes = bytes
     self.destination = destination
   }
 
@@ -30,12 +31,12 @@ public struct JSONTokenizer<Destination: JSONTokenizerDestination>: ~Copyable, ~
 
   /// The pointer that will be parsed
   @usableFromInline
-  internal let bytes: Span<UInt8>
+  internal let bytes: UnsafeBufferPointer<UInt8>
 
   /// The amount of bytes supposedly in the pointer, this must be guaranteed internally
   @usableFromInline
   internal var count: Int {
-    bytes.count - currentOffset
+      unsafe bytes.count - currentOffset
   }
 
   @usableFromInline
@@ -64,12 +65,12 @@ extension JSONTokenizer {
   @inline(__always)
   @usableFromInline
   internal subscript(offset: Int) -> UInt8 {
-    bytes[currentOffset + offset]
+    unsafe bytes[currentOffset + offset]
   }
 
   @usableFromInline
   internal var hasMoreData: Bool {
-    return currentOffset < bytes.count
+    return unsafe currentOffset < bytes.count
   }
 
   /// Throws an error if the count is 0
@@ -85,55 +86,54 @@ extension JSONTokenizer {
   @usableFromInline
   @_lifetime(self: copy self)
   mutating func _skipWhitespace() {
-    let searchEnd = bytes.count
+    let searchEnd = unsafe bytes.count
     let searchStart = currentOffset
 
-    let offset: Int = unsafe bytes.withUnsafeBufferPointer { buffer in
-      var i = searchStart
+    var i = searchStart
 
-      // Align to 8-byte boundary first
-      let alignedStart = (i + 7) & ~7
-      while i < min(alignedStart, searchEnd) {
-        let byte = unsafe buffer[i]
-        if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
-          return i - searchStart
-        }
-        i &+= 1
+    // Align to 8-byte boundary first
+    let alignedStart = (i + 7) & ~7
+    while i < min(alignedStart, searchEnd) {
+      let byte = unsafe bytes[i]
+      if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+        advance(i - searchStart)
+        return
       }
-
-      // Process 8 bytes at a time with better memory access pattern
-      while i &+ 8 <= searchEnd {
-        var foundNonWhitespace = false
-        var nonWhitespaceOffset = 0
-
-        for j in 0..<8 {
-          let byte = unsafe buffer[i &+ j]
-          if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
-            foundNonWhitespace = true
-            nonWhitespaceOffset = j
-            break
-          }
-        }
-
-        if foundNonWhitespace {
-          return (i &+ nonWhitespaceOffset) - searchStart
-        }
-        i &+= 8
-      }
-
-      // Process remaining bytes
-      while i < searchEnd {
-        let byte = unsafe buffer[i]
-        if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
-          return i - searchStart
-        }
-        i &+= 1
-      }
-
-      return searchEnd - searchStart
+      i &+= 1
     }
 
-    advance(offset)
+    // Process 8 bytes at a time with better memory access pattern
+    while i &+ 8 <= searchEnd {
+      var foundNonWhitespace = false
+      var nonWhitespaceOffset = 0
+
+      for j in 0..<8 {
+        let byte = unsafe bytes[i &+ j]
+        if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+          foundNonWhitespace = true
+          nonWhitespaceOffset = j
+          break
+        }
+      }
+
+      if foundNonWhitespace {
+        advance((i &+ nonWhitespaceOffset) - searchStart)
+        return
+      }
+      i &+= 8
+    }
+
+    // Process remaining bytes
+    while i < searchEnd {
+      let byte = unsafe bytes[i]
+      if byte != .space && byte != .tab && byte != .carriageReturn && byte != .newLine {
+        advance(i - searchStart)
+        return
+      }
+      i &+= 1
+    }
+
+    advance(searchEnd - searchStart)
   }
 }
 
