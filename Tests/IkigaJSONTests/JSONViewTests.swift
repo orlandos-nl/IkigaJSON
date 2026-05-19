@@ -8,7 +8,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("{}".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(view.keys, [])
@@ -21,7 +21,7 @@ final class JSONObjectViewTests: XCTestCase {
         }
         let bytes: [UInt8] = Array("[]".utf8)
         do {
-            try bytes.withUnsafeBufferPointer { buffer in
+            try unsafe bytes.withUnsafeBufferPointer { buffer in
                 let span = unsafe Span<UInt8>(_unsafeElements: buffer)
                 _ = try JSONObjectView(span: span)
             }
@@ -37,7 +37,7 @@ final class JSONObjectViewTests: XCTestCase {
         }
         let bytes: [UInt8] = Array("{invalid}".utf8)
         do {
-            try bytes.withUnsafeBufferPointer { buffer in
+            try unsafe bytes.withUnsafeBufferPointer { buffer in
                 let span = unsafe Span<UInt8>(_unsafeElements: buffer)
                 _ = try JSONObjectView(span: span)
             }
@@ -52,7 +52,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis","age":42}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(Set(view.keys), ["name", "age"])
@@ -64,7 +64,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(try view.string(forKey: "name"), "Joannis")
@@ -77,7 +77,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"age":42}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertNil(try view.string(forKey: "age"))
@@ -89,7 +89,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"message":"Hello\nWorld"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(try view.string(forKey: "message"), "Hello\nWorld")
@@ -101,7 +101,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"count":42}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(try view.integer(forKey: "count"), 42)
@@ -114,7 +114,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertNil(try view.integer(forKey: "name"))
@@ -126,7 +126,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"pi":3.14}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(try view.double(forKey: "pi")!, 3.14, accuracy: 0.001)
@@ -139,7 +139,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"active":true,"deleted":false}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(try view.boolean(forKey: "active"), true)
@@ -153,7 +153,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"count":42}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertNil(try view.boolean(forKey: "count"))
@@ -165,7 +165,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"value":null,"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertTrue(try view.isNull(forKey: "value"))
@@ -179,7 +179,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis","age":42,"active":true}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(view["name"] as? String, "Joannis")
@@ -194,7 +194,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"value":null}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssert(view["value"] is NSNull)
@@ -207,7 +207,7 @@ final class JSONObjectViewTests: XCTestCase {
         }
         let json = #"{"name":"Joannis"}"#
         let bytes: [UInt8] = Array(json.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             XCTAssertEqual(view.data, Data(json.utf8))
@@ -219,7 +219,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"user":{"name":"Joannis","age":42}}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let keyCount = try view.withObjectView(forKey: "user") { $0.keys.count }
@@ -232,7 +232,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let result = try view.withObjectView(forKey: "missing") { $0.keys.count }
@@ -245,7 +245,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let result = try view.withObjectView(forKey: "name") { $0.keys.count }
@@ -258,7 +258,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"tags":["swift","json","parsing"]}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let count = try view.withArrayView(forKey: "tags") { $0.count }
@@ -271,7 +271,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let result = try view.withArrayView(forKey: "missing") { $0.count }
@@ -284,7 +284,7 @@ final class JSONObjectViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"{"name":"Joannis"}"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONObjectView(span: span)
             let result = try view.withArrayView(forKey: "name") { $0.count }
@@ -299,7 +299,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view.count, 0)
@@ -312,7 +312,7 @@ final class JSONArrayViewTests: XCTestCase {
         }
         let bytes: [UInt8] = Array("{}".utf8)
         do {
-            try bytes.withUnsafeBufferPointer { buffer in
+            try unsafe bytes.withUnsafeBufferPointer { buffer in
                 let span = unsafe Span<UInt8>(_unsafeElements: buffer)
                 _ = try JSONArrayView(span: span)
             }
@@ -328,7 +328,7 @@ final class JSONArrayViewTests: XCTestCase {
         }
         let bytes: [UInt8] = Array("[invalid]".utf8)
         do {
-            try bytes.withUnsafeBufferPointer { buffer in
+            try unsafe bytes.withUnsafeBufferPointer { buffer in
                 let span = unsafe Span<UInt8>(_unsafeElements: buffer)
                 _ = try JSONArrayView(span: span)
             }
@@ -343,7 +343,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[1,2,3,4,5]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view.count, 5)
@@ -355,7 +355,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"["hello","world"]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view[0] as? String, "hello")
@@ -368,7 +368,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[1,2,3]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view[0] as? Int, 1)
@@ -382,7 +382,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[3.14,2.71]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual((view[0] as? Double)!, 3.14, accuracy: 0.001)
@@ -395,7 +395,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[true,false,true]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view[0] as? Bool, true)
@@ -409,7 +409,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[null]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssert(view[0] is NSNull)
@@ -421,7 +421,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"["hello",42,true,null,3.14]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view.count, 5)
@@ -439,7 +439,7 @@ final class JSONArrayViewTests: XCTestCase {
         }
         let json = "[1,2,3]"
         let bytes: [UInt8] = Array(json.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view.data, Data(json.utf8))
@@ -451,7 +451,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"[{"name":"Joannis","age":42}]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             let obj = view[0] as? JSONObject
@@ -466,7 +466,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[[1,2],[3,4]]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(view.count, 2)
@@ -485,7 +485,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"["hello","world"]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.string(forIndex: 0), "hello")
@@ -498,7 +498,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"["Hello\nWorld"]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.string(forIndex: 0), "Hello\nWorld")
@@ -510,7 +510,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[42]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertNil(try view.string(forIndex: 0))
@@ -522,7 +522,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[1,2,3]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.integer(forIndex: 0), 1)
@@ -535,7 +535,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"["hello"]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertNil(try view.integer(forIndex: 0))
@@ -547,7 +547,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[3.14,2.71]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.double(forIndex: 0)!, 3.14, accuracy: 0.001)
@@ -560,7 +560,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[42]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertNil(try view.double(forIndex: 0))
@@ -572,7 +572,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[true,false]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.boolean(forIndex: 0), true)
@@ -585,7 +585,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[42]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertNil(try view.boolean(forIndex: 0))
@@ -597,7 +597,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"[null,"hello"]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             XCTAssertEqual(try view.isNull(forIndex: 0), true)
@@ -610,7 +610,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array(#"[{"name":"Joannis","age":42}]"#.utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             let keyCount = try view.withObjectView(forIndex: 0) { $0.keys.count }
@@ -623,7 +623,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[42]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             let result = try view.withObjectView(forIndex: 0) { $0.keys.count }
@@ -636,7 +636,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[[1,2,3]]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             let count = try view.withArrayView(forIndex: 0) { $0.count }
@@ -649,7 +649,7 @@ final class JSONArrayViewTests: XCTestCase {
             throw XCTSkip("Requires macOS 26 or later")
         }
         let bytes: [UInt8] = Array("[42]".utf8)
-        try bytes.withUnsafeBufferPointer { buffer in
+        try unsafe bytes.withUnsafeBufferPointer { buffer in
             let span = unsafe Span<UInt8>(_unsafeElements: buffer)
             let view = try JSONArrayView(span: span)
             let result = try view.withArrayView(forIndex: 0) { $0.count }

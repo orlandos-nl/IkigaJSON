@@ -110,8 +110,10 @@ final class IkigaJSONTests: XCTestCase {
     #if os(Linux)
   func testTravelSampleHotelDocument() throws {
     // Regression test for issue #60: hotel document from Couchbase travel-sample dataset
-    let url = Bundle.module.url(forResource: "Fixtures/hotel", withExtension: "json")!
-    let data = try Data(contentsOf: url)
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .appendingPathComponent("Fixtures/hotel.json")
+    let data = try Data(contentsOf: fixtureURL)
     XCTAssertNoThrow(try JSONObject(data: data))
   }
     #endif
