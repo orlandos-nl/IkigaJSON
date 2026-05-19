@@ -77,10 +77,10 @@ public struct JSONObjectView: ~Copyable, ~Escapable {
         }
         
         let type = jsonDescription.type(atOffset: offset)
-        guard type == .string else {
+        guard type == .string || type == .stringWithEscaping else {
             return nil
         }
-        
+
         let bounds = jsonDescription.dataBounds(atIndexOffset: offset)
         let string = JSONToken.String(
             start: JSONSourcePosition(byteIndex: Int(bounds.offset)),

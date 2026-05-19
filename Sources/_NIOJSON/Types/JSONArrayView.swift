@@ -88,10 +88,10 @@ public struct JSONArrayView: ~Copyable, ~Escapable {
         }
         
         let type = jsonDescription.type(atOffset: offset)
-        guard type == .string else {
+        guard type == .string || type == .stringWithEscaping else {
             return nil
         }
-        
+
         let bounds = jsonDescription.dataBounds(atIndexOffset: offset)
         let string = JSONToken.String(
             start: JSONSourcePosition(byteIndex: Int(bounds.offset)),
@@ -100,7 +100,7 @@ public struct JSONArrayView: ~Copyable, ~Escapable {
         )
         return string.makeString(from: span, unicode: true)
     }
-    
+
     public func integer(forIndex index: Int) throws -> Int? {
         _checkBounds(index)
 
@@ -158,8 +158,6 @@ public struct JSONArrayView: ~Copyable, ~Escapable {
           jsonDescription.skipIndex(atOffset: &offset)
         }
 
-        let type = jsonDescription.type(atOffset: offset)
-        
         switch jsonDescription.type(atOffset: offset) {
         case .object, .array, .string, .stringWithEscaping, .integer, .floatingNumber, .null:
             return nil
