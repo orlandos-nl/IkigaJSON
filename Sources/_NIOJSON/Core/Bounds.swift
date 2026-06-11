@@ -110,7 +110,7 @@ extension JSONToken.String {
 
       flushUnicodes()
       return String(decoding: buffer, as: Unicode.UTF8.self)
-    } else if #available(macOS 26.0, *) {
+    } else if #available(macOS 26.0, iOS 26.0, *) {
       // No escaping, use withUnsafeBufferPointer for efficient string creation
         do {
             let subSpan = span.extracting(startOffset ..< startOffset + byteLength)

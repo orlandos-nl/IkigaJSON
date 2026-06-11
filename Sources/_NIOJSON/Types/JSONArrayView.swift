@@ -24,7 +24,7 @@ public struct JSONArrayView: ~Copyable, ~Escapable {
     
     /// A JSON formatted String with the contents of this JSONObject
     
-    @available(macOS 26.0, *)
+    @available(macOS 26.0, iOS 26.0, *)
     public var string: String {
         get throws {
             let span = try UTF8Span(validating: span)
