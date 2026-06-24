@@ -75,7 +75,7 @@ public struct JSONArray: ExpressibleByArrayLiteral, Sequence, Equatable, CustomS
                     bytes: buffer,
                     destination: JSONDescription()
                 )
-                
+
                 try tokenizer.scanValue()
                 return tokenizer.destination
             }
@@ -333,6 +333,14 @@ extension String {
       case .backslash:
         escaped = true
         characters.insert(.backslash, at: i &+ 1)
+      case 0x00..<0x20:
+        escaped = true
+        let byte = characters[i]
+        let hi = byte >> 4
+        let lo = byte & 0x0f
+        let hex: (UInt8) -> UInt8 = { $0 < 10 ? 0x30 &+ $0 : 0x57 &+ $0 }
+        characters[i] = .backslash
+        characters.insert(contentsOf: [.u, .zero, .zero, hex(hi), hex(lo)], at: i &+ 1)
       default:
         continue
       }

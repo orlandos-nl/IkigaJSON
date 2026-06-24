@@ -684,10 +684,13 @@ final class IkigaJSONTests: XCTestCase {
       let yes: String
     }
 
-    let test = Test(yes: "\n")
-    let json = try IkigaJSONEncoder().encode(test)
-    let test2 = try JSONDecoder().decode(Test.self, from: json)
-    XCTAssertEqual(test, test2)
+    let test1 = Test(yes: "Hello\n %0F".removingPercentEncoding!)
+    let json1 = try IkigaJSONEncoder().encode(test1)
+    let json2 = try JSONEncoder().encode(test1)
+    let test2 = try JSONDecoder().decode(Test.self, from: json1)
+    XCTAssertEqual(test1, test2)
+    XCTAssertEqual(json1, json2)
+    XCTAssertTrue(String(data: json1, encoding: .utf8)?.contains("\\u000f") ?? false)
   }
 
   func testEncodeJSONArray() throws {
