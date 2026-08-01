@@ -20,7 +20,11 @@ let package = Package(
     .library(
       name: "IkigaJSON",
       targets: ["IkigaJSON"]
-    )
+    ),
+    .library(
+      name: "IkigaJSONCore",
+      targets: ["_JSONCore"]
+    ),
   ],
   traits: [
     .default(enabledTraits: ["ByteBufferSupport", "FoundationSupport"]),
