@@ -1744,6 +1744,25 @@ final class IkigaJSONTests: XCTestCase {
       try decoder.decode(Foo.self, from: ByteBuffer(string: #"{"foo1":0,"foo2":0}"#)))
   }
 
+  func testEncodeWithMultipleContainer() throws {
+    struct A: Encodable {
+      enum CodingKeys: String, CodingKey {
+        case a
+        case b
+      }
+
+      func encode(to encoder: any Encoder) throws {
+        var container1 = encoder.container(keyedBy: CodingKeys.self)
+        var container2 = encoder.container(keyedBy: CodingKeys.self)
+        try container1.encode("a", forKey: .a)
+        try container2.encode("b", forKey: .b)
+      }
+    }
+
+    XCTAssertEqual(
+      String(decoding: try encoder.encode(A()), as: UTF8.self), #"{"a":"a","b":"b"}"#)
+  }
+
   func testRootLevelPrimitiveDecoding() throws {
     let decoder = IkigaJSONDecoder()
 

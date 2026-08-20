@@ -283,13 +283,15 @@ private final class _JSONEncoder: Encoder {
   }
 
   func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> where Key: CodingKey {
-    if didWriteValue || didHaveContainers {
-      data.insert(.comma, at: &offset)
-    }
+    if end != .curlyRight {
+      if didWriteValue || didHaveContainers {
+        data.insert(.comma, at: &offset)
+      }
 
-    data.insert(.curlyLeft, at: &offset)
-    end = .curlyRight
-    didHaveContainers = true
+      data.insert(.curlyLeft, at: &offset)
+      end = .curlyRight
+      didHaveContainers = true
+    }
 
     let container = KeyedJSONEncodingContainer<Key>(encoder: self)
     return KeyedEncodingContainer(container)
