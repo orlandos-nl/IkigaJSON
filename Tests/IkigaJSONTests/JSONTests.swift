@@ -1759,6 +1759,8 @@ final class IkigaJSONTests: XCTestCase {
       }
     }
 
+    let encoder = IkigaJSONEncoder()
+
     XCTAssertEqual(
       String(decoding: try encoder.encode(A()), as: UTF8.self), #"{"a":"a","b":"b"}"#)
   }
